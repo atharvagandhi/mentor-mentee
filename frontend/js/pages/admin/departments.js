@@ -7,6 +7,7 @@ import { showToast } from '/js/components/toast.js';
 import { DepartmentService, StudentService, FacultyService, ClassService } from '/js/services.js';
 import { escapeHtml } from '/js/utils.js';
 import { parseImportFile } from '/js/excel-import.js';
+import { confirmVoiceAction, requestVoiceInput } from '/js/components/voice-dialog.js';
 
 const normalizeImportValue = value => String(value || '').trim().toLowerCase().replace(/\s+/g, ' ');
 const structureFields = {
@@ -63,7 +64,7 @@ export async function render(container) {
           <div class="card" style="padding:22px;margin-bottom:20px;">
             <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap;margin-bottom:10px;"><div><h3 style="margin:0;">Bulk import university structure</h3><p style="margin:5px 0 0;color:var(--text-secondary);font-size:.84rem;">Build schools, departments, classrooms and optional class-teacher assignments from one CSV or Excel workbook. Existing matching records are reused.</p></div><button id="download-structure-template" class="btn btn-secondary btn-sm">Download template</button></div>
             <p style="margin:0 0 12px;color:var(--text-muted);font-size:.78rem;">Required schoolName and schoolCode for new schools. Add departmentName and departmentCode for departments; classroom is optional. Repeat school/department columns for each classroom row.</p>
-            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;"><input type="file" id="structure-import-file" accept=".csv,.xlsx,.xls" class="form-input" style="max-width:420px;"><button id="import-structure" class="btn btn-primary" disabled>Import ready rows</button></div>
+            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;"><input type="file" id="structure-import-file" aria-label="Choose university structure import file" data-voice-name="Choose university structure import file" accept=".csv,.xlsx,.xls" class="form-input" style="max-width:420px;"><button id="import-structure" class="btn btn-primary" disabled>Import ready rows</button></div>
             <div id="structure-import-preview" style="margin-top:14px;"></div>
           </div>
 
@@ -183,7 +184,7 @@ export async function render(container) {
         <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
           <div><span class="badge badge-accent">SCHOOL</span><h3 style="margin:8px 0 3px;">${escapeHtml(school.name)}</h3>
           <span style="font-size:.8rem;color:var(--text-secondary);">${escapeHtml(school.code || '—')} · Head: ${escapeHtml(school.hodName || 'Unassigned')} · ${childCount} departments · ${studentCount} students</span></div>
-          <div style="display:flex;gap:8px;"><button class="btn btn-sm btn-secondary edit-school" data-id="${escapeHtml(school.id)}">Edit school</button><button class="btn btn-sm btn-danger del-dept" data-id="${escapeHtml(school.id)}">Delete</button></div>
+          <div style="display:flex;gap:8px;"><button class="btn btn-sm btn-secondary edit-school" data-id="${escapeHtml(school.id)}">Edit school</button><button class="btn btn-sm btn-danger del-dept" data-id="${escapeHtml(school.id)}" data-voice-confirm="false">Delete</button></div>
         </div></div>`;
     }).join('');
 
@@ -223,7 +224,7 @@ export async function render(container) {
                 </div>
                 <button class="btn btn-xs btn-secondary edit-dept" data-id="${escapeHtml(d.id)}" style="margin-top:8px;">Edit department</button>
               </div>
-              <button class="btn btn-xs btn-danger del-dept" data-id="${d.id}" title="Delete Department">✕</button>
+              <button class="btn btn-xs btn-danger del-dept" data-id="${d.id}" title="Delete Department" data-voice-confirm="false">✕</button>
             </div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;">
               <div style="text-align:center;background:var(--bg-secondary);border-radius:var(--radius-md);padding:12px;">
@@ -244,7 +245,7 @@ export async function render(container) {
                   <span class="badge badge-info" style="display:inline-flex;align-items:center;gap:6px;font-size:0.78rem;padding:5px 8px;">
                     Class ${escapeHtml(c.className)}
                     <button class="btn-edit-class" data-id="${escapeHtml(c.id)}" data-name="${escapeHtml(c.className)}" title="Rename classroom" style="background:none;border:none;color:currentColor;cursor:pointer;padding:0;">✎</button>
-                    <button class="btn-del-class" data-id="${c.id}" style="background:none;border:none;color:currentColor;cursor:pointer;opacity:0.7;padding:0;" title="Delete class">✕</button>
+                    <button class="btn-del-class" data-id="${c.id}" style="background:none;border:none;color:currentColor;cursor:pointer;opacity:0.7;padding:0;" title="Delete class" aria-label="Delete class ${escapeHtml(c.className || '')}" data-voice-confirm="false">✕</button>
                   </span>
                 `).join('') : '<span style="font-size:0.75rem;color:var(--text-muted);">No classes defined</span>'}
               </div>
@@ -307,7 +308,7 @@ export async function render(container) {
         const id = targetBtn?.dataset?.id;
         if (!id) return;
         const record = depts.find(item => item.id === id);
-        if (!confirm(`Delete ${record?.name || 'this institution'}? This cannot be undone.`)) return;
+        if (!await confirmVoiceAction(`Delete ${record?.name || 'this institution'}? This cannot be undone.`)) return;
         try {
           await DepartmentService.delete(id);
           await loadAll();
@@ -320,11 +321,11 @@ export async function render(container) {
     document.querySelectorAll('.edit-school').forEach(btn => btn.addEventListener('click', async () => {
       const school = schools.find(item => item.id === btn.dataset.id);
       if (!school) return;
-      const name = prompt('School name', school.name);
+      const name = await requestVoiceInput({ title: 'Edit school', label: 'School name', value: school.name });
       if (name === null || !name.trim()) return;
-      const code = prompt('School code', school.code || '');
+      const code = await requestVoiceInput({ title: 'Edit school', label: 'School code', value: school.code || '' });
       if (code === null) return;
-      const hodName = prompt('School head / dean', school.hodName || '');
+      const hodName = await requestVoiceInput({ title: 'Edit school', label: 'School head / dean', value: school.hodName || '' });
       if (hodName === null) return;
       try {
         await DepartmentService.update(school.id, { name: name.trim(), code: code.trim().toUpperCase(), hodName: hodName.trim() });
@@ -335,13 +336,13 @@ export async function render(container) {
     document.querySelectorAll('.edit-dept').forEach(btn => btn.addEventListener('click', async () => {
       const dept = depts.find(item => item.id === btn.dataset.id);
       if (!dept) return;
-      const name = prompt('Department name', dept.name);
+      const name = await requestVoiceInput({ title: 'Edit department', label: 'Department name', value: dept.name });
       if (name === null || !name.trim()) return;
-      const code = prompt('Department code', dept.code || '');
+      const code = await requestVoiceInput({ title: 'Edit department', label: 'Department code', value: dept.code || '' });
       if (code === null) return;
       const choices = schools.map((school, index) => `${index + 1}. ${school.name}`).join('\n');
       const currentIndex = Math.max(0, schools.findIndex(school => school.id === dept.schoolId));
-      const selected = prompt(`School number for this department:\n${choices}`, String(currentIndex + 1));
+      const selected = await requestVoiceInput({ title: 'Choose school', label: `School number. Choices: ${choices}`, value: String(currentIndex + 1), inputType: 'number' });
       if (selected === null) return;
       const school = schools[Number(selected) - 1];
       if (!school) return showToast('Choose a valid school number.', 'warning');
@@ -354,7 +355,7 @@ export async function render(container) {
     document.querySelectorAll('.btn-edit-class').forEach(btn => btn.addEventListener('click', async () => {
       const classRecord = allClasses.find(item => item.id === btn.dataset.id);
       if (!classRecord) return;
-      const className = prompt('Classroom name', classRecord.className || '');
+      const className = await requestVoiceInput({ title: 'Edit classroom', label: 'Classroom name', value: classRecord.className || '' });
       if (className === null || !className.trim()) return;
       try {
         await ClassService.update(classRecord.id, { className: className.trim() });
@@ -367,7 +368,7 @@ export async function render(container) {
         const targetBtn = e.currentTarget || e.target.closest('.btn-del-class');
         const id = targetBtn?.dataset?.id;
         if (!id) return;
-        if (!confirm('Delete this class?')) return;
+        if (!await confirmVoiceAction('Delete this class?')) return;
         try {
           await ClassService.delete(id);
           showToast('Class deleted', 'success');

@@ -1,6 +1,7 @@
 import { MeetingService } from '/js/services.js';
 import { showToast } from '/js/components/toast.js';
 import { exportMeetingSessionReport } from '/js/report-export.js';
+import { requestVoiceInput } from '/js/components/voice-dialog.js';
 
 const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, char => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;'
@@ -418,7 +419,7 @@ export function openMeetingDetailsModal(meeting, isMentor, currentUser, onStatus
               <button class="btn btn-primary" id="btn-quick-approve" style="flex:1; border-radius:10px;">
                 <i class="ph ph-check-circle"></i> Approve Session
               </button>
-              <button class="btn btn-danger" id="btn-quick-reject" style="flex:1; border-radius:10px;">
+              <button class="btn btn-danger" id="btn-quick-reject" data-voice-confirm="false" data-voice-name="Reject meeting for ${escapeHtml(meeting.studentName || 'student')}" aria-label="Reject meeting for ${escapeHtml(meeting.studentName || 'student')}" style="flex:1; border-radius:10px;">
                 <i class="ph ph-x-circle"></i> Reject
               </button>
             </div>
@@ -474,7 +475,12 @@ export function openMeetingDetailsModal(meeting, isMentor, currentUser, onStatus
   const rejectBtn = modalRoot.querySelector('#btn-quick-reject');
   if (rejectBtn) {
     rejectBtn.onclick = async () => {
-      const reason = prompt('Reason for rejection (optional):');
+      const reason = await requestVoiceInput({
+        title: `Reject meeting request for ${meeting.studentName || 'this student'}`,
+        label: `Reason for rejecting meeting with ${meeting.studentName || 'this student'}`,
+        value: 'Unavailable at the requested time',
+        confirmLabel: `Reject meeting for ${meeting.studentName || 'this student'}`,
+      });
       if (reason === null) return;
       try {
         await MeetingService.update(meeting.id, { status: 'REJECTED', rejectionReason: reason || 'Unavailable' });

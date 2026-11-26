@@ -9,10 +9,24 @@ import { db } from '/js/firebase-init.js';
 import { doc, getDoc, updateDoc, setDoc } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
 import { escapeHtml } from '/js/utils.js';
 import { getAttendanceStatus, AttendanceService, AttendanceInterventionService, ResultService } from '/js/services/academic-service.js';
+import { api } from '/js/api.js';
 
 function riskBadge(r) {
   const cls = {HIGH:'badge-danger',MEDIUM:'badge-warning',LOW:'badge-success'}[r]||'badge-muted';
   return `<span class="badge ${cls}">${r||'N/A'}</span>`;
+}
+
+function hasLowAcademicScore(student) {
+  const numericScores = [student?.cgpa, student?.latestSGPA]
+    .map(value => Number(value))
+    .filter(value => Number.isFinite(value) && value > 0);
+  const rawAverage = student?.latestSubjectAverage;
+  const subjectAverage = rawAverage === null || rawAverage === undefined || rawAverage === '' ? NaN : Number(rawAverage);
+  return numericScores.some(value => value < 6) || (Number.isFinite(subjectAverage) && subjectAverage >= 0 && subjectAverage < 50);
+}
+
+function needsSupportMeeting(student) {
+  return getAttendanceStatus(student).isLow || hasLowAcademicScore(student);
 }
 
 export async function render(container) {
@@ -53,6 +67,7 @@ export async function render(container) {
   let lowAttendanceOnly = false;
 
   try {
+    await api.post('/mentor/support-interventions/scan', {}).catch(() => null);
     const [assigned, unassigned] = await Promise.all([
       StudentService.getByMentor(user.id, true),
       StudentService.getUnassigned(user.department)
@@ -67,7 +82,7 @@ export async function render(container) {
       const bData = booklets[idx];
       const bookletPct = BookletService.calculateCompletion(bData);
       const withRisk = !s.riskLevel ? { ...s, ...StatsService.computeRisk(s) } : s;
-      return { ...withRisk, bookletPct, attendanceState: getAttendanceStatus(withRisk) };
+      return { ...withRisk, bookletPct, attendanceState: getAttendanceStatus(withRisk), needsSupport: needsSupportMeeting(withRisk) };
     });
 
     // Only show unapproved students in the pending queue
@@ -152,9 +167,10 @@ export async function render(container) {
                   <span style="font-size:0.78rem;font-weight:700;color:${(s.bookletPct||0)<25?'var(--warning)':'var(--success)'};">${s.bookletPct||0}%</span>
                 </div>
               </td>
-              <td>${riskBadge(s.riskLevel)}</td>
+              <td>${riskBadge(s.riskLevel)} ${s.needsSupport ? '<span class="badge badge-warning" title="Recorded attendance or marks need a mentor check-in">Support check-in</span>' : ''}</td>
               <td style="white-space:nowrap;">
                   <button class="btn btn-xs btn-secondary view-btn" data-id="${s.id}">View</button>
+                  ${s.needsSupport ? `<button class="btn btn-xs btn-primary btn-support-meeting" data-id="${s.id}" data-voice-name="Request support meeting for ${escapeHtml(s.name || 'student')}" aria-label="Request support meeting for ${escapeHtml(s.name || 'student')}"><i class="ph ph-calendar-plus"></i> Arrange support meeting</button>` : ''}
                   <a href="#/mentor/booklet?studentId=${s.id}" class="btn btn-xs btn-primary" style="display:inline-flex;align-items:center;gap:4px;"><i class="ph ph-book-open"></i> Booklet</a>
                   ${(s.bookletPct||0) < 25 ? `<button class="btn btn-xs btn-secondary btn-remind-booklet" data-id="${s.id}" data-name="${escapeHtml(s.name || 'Student')}" title="Send Reminder to Fill Booklet" style="color:var(--warning);border-color:var(--warning);margin-left:4px;"><i class="ph ph-bell"></i> Remind</button>` : ''}
               </td>
@@ -197,7 +213,7 @@ export async function render(container) {
           </div>
           <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:16px 0;">
             <span><strong>Latest subject average:</strong> ${s.latestSubjectAverage === null || s.latestSubjectAverage === undefined ? 'Not assessed' : `${escapeHtml(s.latestSubjectAverage)}%`} · <strong>Learner level:</strong> ${escapeHtml(s.learnerLevel || 'Not assessed')}</span>
-            ${getAttendanceStatus(s).isLow ? '<button id="student-fr-meeting" class="btn btn-sm btn-primary" type="button">Request special FR meeting</button>' : ''}
+            ${needsSupportMeeting(s) ? `<button id="student-fr-meeting" class="btn btn-sm btn-primary" type="button" aria-label="Request support meeting for ${escapeHtml(s.name || 'student')}">Arrange AI-supported check-in</button>` : ''}
           </div>
           <div id="student-academic-history" class="card" style="padding:16px;"><p style="color:var(--text-muted);margin:0;">Loading semester marks and monthly attendance…</p></div>
         `;
@@ -205,17 +221,7 @@ export async function render(container) {
           panel.style.display = 'none';
         });
         const meetingButton = panel.querySelector('#student-fr-meeting');
-        meetingButton?.addEventListener('click', async () => {
-          meetingButton.disabled = true;
-          try {
-            const result = await AttendanceInterventionService.requestMeeting(s.id);
-            meetingButton.textContent = result.created ? 'Meeting requested' : 'Meeting already requested';
-            showToast(result.created ? 'Special FR attendance meeting requested.' : 'An open FR attendance meeting already exists.', result.created ? 'success' : 'info');
-          } catch (error) {
-            showToast(error.message || 'Could not request the special meeting.', 'error');
-            meetingButton.disabled = false;
-          }
-        });
+        meetingButton?.addEventListener('click', () => requestSupportMeeting(s.id, meetingButton));
         try {
           const [results, months] = await Promise.all([
             ResultService.getByStudent(s.id),
@@ -233,6 +239,10 @@ export async function render(container) {
         }
         panel.scrollIntoView({ behavior: 'smooth' });
       });
+    });
+
+    document.querySelectorAll('.btn-support-meeting').forEach(button => {
+      button.addEventListener('click', () => requestSupportMeeting(button.dataset.id, button));
     });
 
     document.querySelectorAll('.btn-remind-booklet').forEach(btn => {
@@ -284,6 +294,26 @@ export async function render(container) {
         }
       });
     });
+  }
+
+  async function requestSupportMeeting(studentId, button) {
+    if (!studentId || !button) return;
+    button.disabled = true;
+    const previousLabel = button.textContent;
+    button.setAttribute('aria-busy', 'true');
+    try {
+      const result = await AttendanceInterventionService.requestMeeting(studentId);
+      button.textContent = result.created ? 'Meeting requested' : 'Meeting already arranged';
+      showToast(result.created
+        ? 'Support meeting request sent. The assigned mentor has been notified to arrange a time.'
+        : 'A support meeting request already exists for these recorded concerns.', result.created ? 'success' : 'info');
+    } catch (error) {
+      showToast(error.message || 'Could not request the support meeting.', 'error');
+      button.disabled = false;
+      button.textContent = previousLabel;
+    } finally {
+      button.removeAttribute('aria-busy');
+    }
   }
 
   let searchTimeout = null;

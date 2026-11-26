@@ -69,6 +69,12 @@ class AllocationService:
             message=f"Student {student.get('name')} has been assigned to you.",
             related_id=student_id
         )
+        try:
+            from app.services.intervention_service import ensure_student_support_meeting
+            ensure_student_support_meeting(student_id)
+        except Exception:
+            # Keep allocation successful if an academic follow-up cannot be created.
+            pass
         return {"status": "success", "studentId": student_id, "mentorId": mentor_id}
 
     def bulk_allocate(self, allocations: list):

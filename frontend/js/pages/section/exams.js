@@ -205,7 +205,7 @@ export async function render(container) {
             <div style="border-top:1px solid var(--border);margin-top:16px;padding-top:16px;">
               <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:8px;"><div><h4 style="margin:0;">Bulk progression decisions</h4><p style="margin:4px 0 0;color:var(--text-muted);font-size:.78rem;">Upload approved progression decisions by enrollment number. A reason is required for every row.</p></div><button id="download-progression-template" class="btn btn-secondary btn-sm">Download template</button></div>
               <p style="margin:0 0 10px;color:var(--text-muted);font-size:.76rem;">Columns: enrollmentNumber, decision (YEAR_DOWN or PROGRESS), targetYear, academicYear, reason. YEAR_DOWN must keep the current year; PROGRESS can advance or clear a repeat.</p>
-              <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;"><input type="file" id="progression-file" accept=".csv,.xlsx,.xls" class="form-input" style="max-width:380px;"><button id="import-progression" class="btn btn-primary" disabled>Save ready decisions</button></div>
+              <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;"><input type="file" id="progression-file" aria-label="Choose progression decisions file" data-voice-name="Choose progression decisions file" accept=".csv,.xlsx,.xls" class="form-input" style="max-width:380px;"><button id="import-progression" class="btn btn-primary" disabled>Save ready decisions</button></div>
               <div id="progression-import-preview" style="margin-top:12px;"></div>
             </div>
           </div>
@@ -225,7 +225,7 @@ export async function render(container) {
               <div class="form-group" style="margin:0;"><label class="form-label">Exam / result label</label><input class="form-input" id="exam-name" placeholder="End Semester Examination"></div>
               <div class="form-group" style="margin:0;"><label class="form-label">Academic year</label><input class="form-input" id="result-academic-year" value="${escapeHtml(config.activeAcademicYear || '')}" placeholder="2026-27"></div>
             </div>
-            <input type="file" id="results-file" accept=".csv,.xlsx,.xls" class="form-input" style="max-width:480px;">
+            <input type="file" id="results-file" aria-label="Choose results file" data-voice-name="Choose results file" accept=".csv,.xlsx,.xls" class="form-input" style="max-width:480px;">
             <div id="results-preview" style="margin-top:16px;"></div>
             <div style="display:flex;justify-content:flex-end;margin-top:14px;"><button class="btn btn-primary" id="publish-results" disabled>Publish ready results</button></div>
           </div>

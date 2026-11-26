@@ -98,7 +98,7 @@ export function renderNotifications() {
   }
 
   list.innerHTML = currentNotifications.slice(0, 50).map(n => `
-    <div class="notification-item ${n.isRead ? '' : 'unread'}" data-id="${n.id}" style="cursor:pointer;">
+    <div class="notification-item ${n.isRead ? '' : 'unread'}" data-id="${n.id}" role="button" tabindex="0" aria-label="${escapeHtml(n.title || 'Open notification')}" style="cursor:pointer;">
       <div class="notification-icon">
         <i class="ph ${getIconForType(n.type)}"></i>
       </div>

@@ -84,4 +84,12 @@ def recalculate_class_attendance(class_id: str) -> dict:
 
     if batch_size:
         batch.commit()
+
+    from app.services.intervention_service import ensure_student_support_meeting
+    for student_id in totals:
+        try:
+            ensure_student_support_meeting(student_id)
+        except Exception:
+            # Attendance summaries are authoritative even if notification delivery fails.
+            continue
     return {"updatedStudents": updated, "classId": class_id}

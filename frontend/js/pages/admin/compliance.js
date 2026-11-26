@@ -6,6 +6,7 @@ import { createHeader } from '/js/components/header.js';
 import { showToast } from '/js/components/toast.js';
 import { StudentService, FacultyService, DepartmentService, BookletService, NotificationService } from '/js/services.js';
 import { escapeHtml, exportToCSV } from '/js/utils.js';
+import { confirmVoiceAction } from '/js/components/voice-dialog.js';
 
 export async function render(container) {
   const user = getUserProfile();
@@ -119,7 +120,7 @@ export async function render(container) {
             <button class="btn btn-sm btn-secondary" onclick="window.print()" style="display:flex; align-items:center; gap:6px; font-weight:600;">
               <i class="ph ph-printer" style="font-size:1.1rem; color:var(--text-primary);"></i> Print Report
             </button>
-            <button class="btn btn-sm btn-primary" id="btn-broadcast-nudge" style="display:flex; align-items:center; gap:6px; font-weight:600; background:linear-gradient(135deg, #ef4444, #f59e0b); border:none; color:#fff;">
+            <button class="btn btn-sm btn-primary" id="btn-broadcast-nudge" data-voice-confirm="false" style="display:flex; align-items:center; gap:6px; font-weight:600; background:linear-gradient(135deg, #ef4444, #f59e0b); border:none; color:#fff;">
               <i class="ph ph-bell-ringing" style="font-size:1.1rem;"></i> Nudge All Defaulters (${defaulterCount + inProgressCount})
             </button>
           </div>
@@ -440,7 +441,7 @@ export async function render(container) {
           return;
         }
 
-        const confirmed = window.confirm(`Send an automated compliance reminder notification to all ${nonCompliant.length} students currently below 60% completion?`);
+        const confirmed = await confirmVoiceAction(`Send an automated compliance reminder notification to all ${nonCompliant.length} students currently below 60% completion?`);
         if (!confirmed) return;
 
         broadcastBtn.disabled = true;

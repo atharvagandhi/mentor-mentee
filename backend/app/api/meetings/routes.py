@@ -10,8 +10,8 @@ from app.firebase.client import firebase_auth
 from app.core.exceptions import NotFoundException, ForbiddenException, ServiceUnavailableException, BadRequestException
 from app.schemas.ai_notes import AINotesRequest
 from app.utils.helpers import get_timestamp
-from app.services.notification_service import NotificationService
 from app.services.allocation_service import AllocationService
+from app.services.intervention_service import ensure_student_support_meeting, support_signals
 from firebase_admin import firestore as admin_firestore
 from uuid import uuid4
 
@@ -20,7 +20,7 @@ router = APIRouter(prefix="/meetings", tags=["Meetings"])
 
 @router.post("/students/{student_id}/attendance-intervention")
 def request_attendance_intervention(student_id: str, user=Depends(get_current_user)):
-    """Create one open special meeting request for a student flagged FR (attendance <= 40%)."""
+    """Request an idempotent meeting for recorded low attendance or low marks."""
     role = str(user.get("role") or "").upper()
     if role not in {"FACULTY", "MENTOR", "HOD", "DEAN", "ADMIN"}:
         raise ForbiddenException("Your role cannot request an attendance intervention meeting")
@@ -31,13 +31,9 @@ def request_attendance_intervention(student_id: str, user=Depends(get_current_us
     student_data = student.to_dict() or {}
     if str(student_data.get("status") or "").lower() not in {"approved", "active"} or student_data.get("isApproved", True) is False:
         raise BadRequestException("An approved student account is required")
-    try:
-        attendance = float(student_data.get("attendance") or 0)
-        sessions = int(student_data.get("attendanceSessions") or 0)
-    except (TypeError, ValueError):
-        attendance, sessions = 0, 0
-    if sessions < 1 or attendance > 40:
-        raise BadRequestException("A special FR meeting is available after attendance is recorded at 40% or below")
+    signals, _ = support_signals(student_data)
+    if not signals:
+        raise BadRequestException("A support meeting is available after low attendance or low academic scores are recorded")
 
     if role in {"FACULTY", "MENTOR"} and user["uid"] not in {
         student_data.get("mentorId"), student_data.get("secondaryMentorId")
@@ -58,58 +54,15 @@ def request_attendance_intervention(student_id: str, user=Depends(get_current_us
     if not mentor_id:
         raise BadRequestException("Assign an eligible department mentor before requesting the intervention meeting")
 
-    active_statuses = {"REQUESTED", "APPROVED", "SCHEDULED", "ONGOING", "IN_PROGRESS"}
-    existing = repo.db.collection("meetings").where("studentId", "==", student_id).stream()
-    for meeting_doc in existing:
-        meeting = meeting_doc.to_dict() or {}
-        if meeting.get("attendanceIntervention") is True and meeting.get("status") in active_statuses:
-            return {"meetingId": meeting_doc.id, "created": False, "status": meeting.get("status")}
-
     mentor_doc = repo.db.collection("faculty").document(mentor_id).get()
     mentor = mentor_doc.to_dict() or {} if mentor_doc.exists else {}
     if str(mentor.get("status") or "").lower() not in {"approved", "active"} or mentor.get("isApproved", True) is False:
         raise BadRequestException("The assigned mentor account is not active")
 
-    now = get_timestamp()
-    meeting_ref = repo.db.collection("meetings").document()
-    meeting = {
-        "id": meeting_ref.id,
-        "studentId": student_id,
-        "studentName": student_data.get("name") or "Student",
-        "mentorId": mentor_id,
-        "mentorName": mentor.get("name") or "Mentor",
-        "department": student_data.get("department") or "",
-        "departmentId": student_data.get("departmentId"),
-        "schoolId": student_data.get("schoolId"),
-        "schoolName": student_data.get("schoolName") or "",
-        "type": "ACADEMIC",
-        "title": "Special FR Attendance Support Meeting",
-        "description": f"Attendance intervention meeting requested at {attendance:.1f}% across {sessions} recorded class sessions. Review barriers, agree on an attendance recovery plan, and record the follow-up with the student.",
-        "status": "REQUESTED",
-        "attendanceIntervention": True,
-        "attendanceFlag": "FR",
-        "attendanceAtRequest": attendance,
-        "attendanceSessionsAtRequest": sessions,
-        "createdBy": user["uid"],
-        "createdByRole": role,
-        "createdAt": now,
-        "updatedAt": now,
-    }
-    meeting_ref.set(meeting)
-    notifier = NotificationService()
-    notifier.create_notification(
-        user_id=mentor_id, notif_type="MEETING_REQUESTED",
-        title="FR attendance meeting requested",
-        message=f"Please arrange a special attendance support meeting with {student_data.get('name') or 'your mentee'} ({attendance:.1f}% attendance).",
-        related_id=meeting_ref.id,
-    )
-    notifier.create_notification(
-        user_id=student_id, notif_type="MEETING_REQUESTED",
-        title="Attendance support meeting requested",
-        message="Your mentor has been asked to arrange a meeting to discuss attendance support and next steps.",
-        related_id=meeting_ref.id,
-    )
-    return {"meetingId": meeting_ref.id, "created": True, "status": "REQUESTED"}
+    result = ensure_student_support_meeting(student_id, requested_by=user)
+    if not result:
+        raise BadRequestException("The student's recorded information is not currently eligible for a support meeting")
+    return result
 
 
 def _same_department(user: dict, record: dict) -> bool:

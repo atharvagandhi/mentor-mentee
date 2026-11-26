@@ -542,6 +542,12 @@ def publish_semester_result(data: dict, user=Depends(require_role(UserRole.ADMIN
     batch.set(result_ref, result, merge=True)
     batch.update(student_ref, updates)
     batch.commit()
+    try:
+        from app.services.intervention_service import ensure_student_support_meeting
+        ensure_student_support_meeting(student_id)
+    except Exception:
+        # Publishing the result must succeed even if a support notification is unavailable.
+        pass
     return {"id": result_id, **result}
 
 

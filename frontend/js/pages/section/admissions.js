@@ -272,7 +272,7 @@ export async function render(container) {
                 <div class="form-group" style="margin:0;"><label class="form-label">Duration (years)</label><input id="course-duration" class="form-input" type="number" min="1" max="8" placeholder="1–8" required></div>
                 <button class="btn btn-secondary" id="add-course">Add course</button>
               </div>
-              <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:14px;"><input id="course-import-file" type="file" accept=".csv,.xlsx,.xls" class="form-input" style="max-width:380px;"><button class="btn btn-secondary btn-sm" id="download-course-template">Download course template</button><button id="import-courses" class="btn btn-secondary btn-sm" disabled>Import course rows</button></div>
+              <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:14px;"><input id="course-import-file" type="file" aria-label="Choose course import file" data-voice-name="Choose course import file" accept=".csv,.xlsx,.xls" class="form-input" style="max-width:380px;"><button class="btn btn-secondary btn-sm" id="download-course-template">Download course template</button><button id="import-courses" class="btn btn-secondary btn-sm" disabled>Import course rows</button></div>
               <div id="course-import-preview" style="margin-top:10px;"></div>
               <div id="course-list" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;"></div>
               <div style="display:flex;justify-content:flex-end;margin-top:14px;"><button class="btn btn-primary" id="save-academic-config">Save academic setup</button></div>
@@ -282,20 +282,20 @@ export async function render(container) {
               <div><h3 style="margin:0;">Import admission list</h3><p style="margin:5px 0 0;color:var(--text-secondary);font-size:.84rem;">CSV or Excel. Required: name, enrollment number, email, mobile, department and course. Optional: parent contact, admissionStatus (ADMITTED or PROVISIONAL) and provisionalUntil. The mobile number is the initial password.</p></div>
                 <button class="btn btn-secondary btn-sm" id="download-admission-template">Download template</button>
               </div>
-              <input type="file" id="admission-file" accept=".csv,.xlsx,.xls" class="form-input" style="max-width:480px;">
+              <input type="file" id="admission-file" aria-label="Choose admissions import file" data-voice-name="Choose admissions import file" accept=".csv,.xlsx,.xls" class="form-input" style="max-width:480px;">
               <div id="admission-preview" style="margin-top:16px;"></div>
               <div style="display:flex;justify-content:flex-end;margin-top:14px;"><button class="btn btn-primary" id="import-admissions" disabled>Import ready students</button></div>
             </div>
             <div class="card" style="padding:22px;margin-top:18px;">
               <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap;margin-bottom:10px;"><div><h3 style="margin:0;">Bulk update admission status</h3><p style="margin:5px 0 0;color:var(--text-secondary);font-size:.84rem;">Update existing students by enrollment number, including provisional review dates and pending-document notes.</p></div><button id="download-admission-status-template" class="btn btn-secondary btn-sm">Download template</button></div>
               <p style="margin:0 0 12px;color:var(--text-muted);font-size:.78rem;">Columns: enrollmentNumber, admissionStatus (ADMITTED or PROVISIONAL), provisionalUntil, admissionNotes. Rows are previewed and matched before updates run.</p>
-              <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;"><input type="file" id="admission-status-file" accept=".csv,.xlsx,.xls" class="form-input" style="max-width:420px;"><button id="import-admission-status" class="btn btn-primary" disabled>Update ready students</button></div>
+              <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;"><input type="file" id="admission-status-file" aria-label="Choose admissions status file" data-voice-name="Choose admissions status file" accept=".csv,.xlsx,.xls" class="form-input" style="max-width:420px;"><button id="import-admission-status" class="btn btn-primary" disabled>Update ready students</button></div>
               <div id="admission-status-preview" style="margin-top:14px;"></div>
             </div>
             <div class="card" style="padding:22px;margin-top:18px;">
               <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-bottom:12px;"><div><h3 style="margin:0;">Bulk fee schedules and receipts</h3><p style="margin:5px 0 0;color:var(--text-secondary);font-size:.84rem;">Import fee totals, due dates and received payments by enrollment number. Preview validates each row before any ledger entry is saved.</p></div><button class="btn btn-secondary btn-sm" id="download-fee-template">Download fee template</button></div>
               <p style="margin:0 0 12px;color:var(--text-muted);font-size:.78rem;">Columns: enrollmentNumber (required), totalAmount, dueDate, paymentAmount, reference, note. Leave optional cells blank to keep existing values. A payment requires a unique receipt reference and creates a separate ledger entry; re-importing that reference is idempotent.</p>
-              <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;"><input type="file" id="fee-import-file" accept=".csv,.xlsx,.xls" class="form-input" style="max-width:420px;"><button class="btn btn-primary" id="import-fees" disabled>Import ready fee rows</button></div>
+              <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;"><input type="file" id="fee-import-file" aria-label="Choose fee import file" data-voice-name="Choose fee import file" accept=".csv,.xlsx,.xls" class="form-input" style="max-width:420px;"><button class="btn btn-primary" id="import-fees" disabled>Import ready fee rows</button></div>
               <div id="fee-import-preview" style="margin-top:14px;"></div>
             </div>
             <div class="card" style="padding:22px;margin-top:20px;">

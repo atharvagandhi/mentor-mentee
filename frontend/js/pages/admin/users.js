@@ -9,6 +9,7 @@ import { StudentService, FacultyService, AdminService, DepartmentService } from 
 import { showToast } from '/js/components/toast.js';
 import { parseImportFile, isRowObjectEmpty } from '/js/excel-import.js';
 import { escapeHtml } from '/js/utils.js';
+import { confirmVoiceAction } from '/js/components/voice-dialog.js';
 
 /** Returns a coloured role badge HTML string for display in user tables. */
 function roleBadge(r) {
@@ -120,8 +121,8 @@ export async function render(container) {
                 <button class="btn btn-xs btn-secondary btn-view-profile" data-id="${u.id}">View</button>
                 ${(u.role||'').toUpperCase() === 'STUDENT' ? `<a href="#/mentor/booklet?studentId=${u.id}" class="btn btn-xs btn-primary" style="margin-left:4px;">Booklet</a>` : ''}
                 ${!u.isApproved ? `<button class="btn btn-xs btn-primary btn-approve" style="margin-left:4px;" data-id="${u.id}" data-role="${u.role}">Approve</button>` : ''}
-                ${(u.role||'').toUpperCase() === 'STUDENT' && u.mentorId ? `<button class="btn btn-xs btn-secondary btn-unassign-mentor" style="margin-left:4px;" data-id="${u.id}" data-name="${(u.name||'').replace(/"/g,'&quot;')}" title="Unassign Mentor">Unassign</button>` : ''}
-                ${user.role === 'ADMIN' ? `<button class="btn btn-xs btn-danger btn-delete-user" style="margin-left:4px;" data-id="${u.id}" data-name="${(u.name||'').replace(/"/g,'&quot;')}" data-role="${u.role}">Delete</button>` : ''}
+                ${(u.role||'').toUpperCase() === 'STUDENT' && u.mentorId ? `<button class="btn btn-xs btn-secondary btn-unassign-mentor" style="margin-left:4px;" data-id="${u.id}" data-name="${(u.name||'').replace(/"/g,'&quot;')}" title="Unassign Mentor" data-voice-confirm="false">Unassign</button>` : ''}
+                ${user.role === 'ADMIN' ? `<button class="btn btn-xs btn-danger btn-delete-user" style="margin-left:4px;" data-id="${u.id}" data-name="${(u.name||'').replace(/"/g,'&quot;')}" data-role="${u.role}" data-voice-confirm="false">Delete</button>` : ''}
               </td>
             </tr>
           `).join('')}
@@ -183,7 +184,7 @@ export async function render(container) {
       btn.addEventListener('click', async (e) => {
         const id = e.currentTarget.dataset.id;
         const name = e.currentTarget.dataset.name;
-        if (!confirm(`Unassign mentor from "${name}"? Their assignedStudentCount will be decremented.`)) return;
+        if (!await confirmVoiceAction(`Unassign mentor from "${name}"? Their assigned student count will be decremented.`)) return;
         btn.disabled = true; btn.textContent = '...';
         try {
           const { StudentService } = await import('/js/services.js');
@@ -204,7 +205,7 @@ export async function render(container) {
         const id = e.currentTarget.dataset.id;
         const name = e.currentTarget.dataset.name;
         const role = (e.currentTarget.dataset.role || '').toUpperCase();
-        if (!confirm(`Permanently delete "${name}"? This cannot be undone.\n\nNote: Their Firebase Auth account will NOT be deleted automatically.`)) return;
+        if (!await confirmVoiceAction(`Permanently delete "${name}"? This cannot be undone. The sign-in account will not be deleted automatically.`)) return;
         btn.disabled = true; btn.textContent = '...';
         try {
           if (role === 'STUDENT') {
@@ -353,7 +354,7 @@ export async function render(container) {
           </div>
 
           <!-- File Upload Zone -->
-          <div id="bulk-drop-zone" style="border:2px dashed var(--border);border-radius:8px;padding:28px 16px;text-align:center;background:var(--bg-primary);margin-bottom:16px;cursor:pointer;transition:border-color 0.2s;">
+          <div id="bulk-drop-zone" role="button" tabindex="0" aria-label="Choose student or faculty import file" data-voice-name="Choose student or faculty import file" style="border:2px dashed var(--border);border-radius:8px;padding:28px 16px;text-align:center;background:var(--bg-primary);margin-bottom:16px;cursor:pointer;transition:border-color 0.2s;">
             <p style="font-size:1.5rem;margin-bottom:4px;">📁</p>
             <p style="font-weight:600;margin-bottom:4px;font-size:0.95rem;" id="drop-zone-label">Click or Drag & Drop your CSV or Excel file (.csv, .xlsx, .xls) here</p>
             <p style="font-size:0.75rem;color:var(--text-muted);margin:0;">
@@ -475,8 +476,8 @@ export async function render(container) {
 
         ${user.role === 'ADMIN' ? `
         <div style="display:flex;gap:8px;padding-top:12px;border-top:1px solid var(--border);flex-wrap:wrap;">
-          ${isStudent && u.mentorId ? `<button class="btn btn-sm btn-secondary" id="modal-btn-unassign" data-id="${u.id}" data-name="${(u.name||'').replace(/"/g,'&quot;')}">Unassign Mentor</button>` : ''}
-          <button class="btn btn-sm btn-danger" id="modal-btn-delete" data-id="${u.id}" data-name="${(u.name||'').replace(/"/g,'&quot;')}" data-role="${u.role}" style="margin-left:auto;">🗑 Delete User</button>
+          ${isStudent && u.mentorId ? `<button class="btn btn-sm btn-secondary" id="modal-btn-unassign" data-id="${u.id}" data-name="${(u.name||'').replace(/"/g,'&quot;')}" data-voice-confirm="false">Unassign Mentor</button>` : ''}
+          <button class="btn btn-sm btn-danger" id="modal-btn-delete" data-id="${u.id}" data-name="${(u.name||'').replace(/"/g,'&quot;')}" data-role="${u.role}" style="margin-left:auto;" data-voice-confirm="false">🗑 Delete User</button>
         </div>` : ''}
      `;
      viewModal.style.display = 'flex';
@@ -485,7 +486,7 @@ export async function render(container) {
      document.getElementById('modal-btn-unassign')?.addEventListener('click', async (e) => {
        const id = e.currentTarget.dataset.id;
        const name = e.currentTarget.dataset.name;
-       if (!confirm(`Unassign mentor from "${name}"?`)) return;
+       if (!await confirmVoiceAction(`Unassign mentor from "${name}"?`)) return;
        e.currentTarget.disabled = true; e.currentTarget.textContent = '...';
        try {
          await StudentService.unassignMentor(id);
@@ -501,7 +502,7 @@ export async function render(container) {
        const id = e.currentTarget.dataset.id;
        const name = e.currentTarget.dataset.name;
        const role = (e.currentTarget.dataset.role || '').toUpperCase();
-       if (!confirm(`Permanently delete "${name}"? This cannot be undone.\n\nNote: Their Firebase Auth account will NOT be deleted automatically.`)) return;
+       if (!await confirmVoiceAction(`Permanently delete "${name}"? This cannot be undone. The sign-in account will not be deleted automatically.`)) return;
        e.currentTarget.disabled = true; e.currentTarget.textContent = '...';
        try {
          if (role === 'STUDENT') {
@@ -1235,7 +1236,7 @@ export async function render(container) {
         <div class="modal-body" style="padding-top:14px;max-height:75vh;overflow-y:auto;">
 
           <!-- Drop Zone -->
-          <div id="assign-drop-zone" style="border:2px dashed #6c47ff88;border-radius:10px;padding:22px 16px;text-align:center;background:var(--bg-primary);margin-bottom:14px;cursor:pointer;transition:border-color 0.2s;">
+          <div id="assign-drop-zone" role="button" tabindex="0" aria-label="Choose a student mentor allocation file" data-voice-name="Choose student mentor allocation file" style="border:2px dashed #6c47ff88;border-radius:10px;padding:22px 16px;text-align:center;background:var(--bg-primary);margin-bottom:14px;cursor:pointer;transition:border-color 0.2s;">
             <p style="font-size:1.6rem;margin-bottom:4px;">📑</p>
             <p style="font-weight:600;font-size:0.95rem;" id="assign-drop-label">Click or Drag &amp; Drop Class Register sheet here (.csv, .xlsx, .xls)</p>
             <p style="font-size:0.75rem;color:var(--text-muted);margin:6px 0 0;">

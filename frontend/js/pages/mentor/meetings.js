@@ -9,6 +9,8 @@ import { navigateTo } from '/js/router.js';
 import { createSidebar } from '/js/components/sidebar.js';
 import { createHeader } from '/js/components/header.js';
 import { showToast } from '/js/components/toast.js';
+import { escapeHtml } from '/js/utils.js';
+import { requestVoiceInput } from '/js/components/voice-dialog.js';
 import { MeetingService, NotificationService, TaskService, IssueService, StudentService, AvailabilityService } from '/js/services.js';
 import { AIService } from '/js/services/ai-service.js';
 import { exportMeetingSessionReport } from '/js/report-export.js';
@@ -166,7 +168,7 @@ export async function render(container) {
 
               <div style="flex:1; min-width:260px;">
                 <div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-bottom:6px;">
-                  <strong style="font-size:0.95rem; color:var(--text);">${isGroup ? 'All Assigned Cohort Students' : (m.studentName || '—')}</strong>
+                    <strong style="font-size:0.95rem; color:var(--text);">${isGroup ? 'All Assigned Cohort Students' : escapeHtml(m.studentName || '—')}</strong>
                   <span class="badge ${isGroup ? 'badge-primary' : 'badge-accent'}" style="font-weight:600;">
                     ${isGroup ? '👥 Cohort Session' : (m.type || m.topic || 'Mentorship Session')}
                   </span>
@@ -176,7 +178,7 @@ export async function render(container) {
                 
                 <div style="background:rgba(0,0,0,0.02); border-left:3px solid var(--primary); padding:6px 10px; border-radius:0 8px 8px 0; margin-bottom:8px;">
                   <p style="color:var(--text); font-size:0.85rem; margin:0; line-height:1.4;">
-                    <strong>Why/Agenda:</strong> ${m.description || 'General progress check-in'}
+                    <strong>Why/Agenda:</strong> ${escapeHtml(m.description || 'General progress check-in')}
                   </p>
                 </div>
 
@@ -188,18 +190,19 @@ export async function render(container) {
 
               <div style="display:flex; flex-direction:column; gap:8px; flex-shrink:0;">
                 ${m.status === 'REQUESTED' ? `
-                  <input type="datetime-local" class="form-input sched-i" data-id="${m.id}" value="${m.preferredDate || ''}" style="width:210px; padding:7px 10px; font-size:0.8rem; border-radius:8px;">
+                  <input type="datetime-local" class="form-input sched-i" data-id="${m.id}" data-voice-name="Meeting date and time for ${escapeHtml(m.studentName || 'student')}" aria-label="Meeting date and time for ${escapeHtml(m.studentName || 'student')}" value="${m.preferredDate || ''}" style="width:210px; padding:7px 10px; font-size:0.8rem; border-radius:8px;">
+                  ${m.supportIntervention ? `<button class="btn btn-sm btn-secondary ai-support-plan-btn" data-id="${m.id}" data-voice-name="Generate AI support plan for ${escapeHtml(m.studentName || 'student')}" aria-label="Generate AI support plan for ${escapeHtml(m.studentName || 'student')}" type="button"><i class="ph ph-sparkle"></i> AI support plan</button>` : ''}
                   <div style="display:flex; gap:8px;">
-                    <button class="btn btn-sm btn-success appr-btn" data-id="${m.id}" data-sid="${m.studentId}" style="border-radius:8px; font-weight:600;">✓ Approve</button>
-                    <button class="btn btn-sm btn-danger rej-btn" data-id="${m.id}" data-sid="${m.studentId}" style="border-radius:8px; font-weight:600;">✗ Reject</button>
+                    <button class="btn btn-sm btn-success appr-btn" data-id="${m.id}" data-sid="${m.studentId}" data-voice-name="Approve meeting for ${escapeHtml(m.studentName || 'student')}" aria-label="Approve meeting for ${escapeHtml(m.studentName || 'student')}" style="border-radius:8px; font-weight:600;">✓ Approve</button>
+                    <button class="btn btn-sm btn-danger rej-btn" data-voice-confirm="false" data-id="${m.id}" data-sid="${m.studentId}" data-voice-name="Reject meeting for ${escapeHtml(m.studentName || 'student')}" aria-label="Reject meeting for ${escapeHtml(m.studentName || 'student')}" style="border-radius:8px; font-weight:600;">✗ Reject</button>
                   </div>
                 ` : (m.status === 'APPROVED' || m.status === 'ONGOING') ? `
                   <div style="display:flex; gap:6px;">
-                    <button class="btn btn-sm btn-primary join-btn" data-id="${m.id}" style="border-radius:8px; font-weight:700;">
+                    <button class="btn btn-sm btn-primary join-btn" data-id="${m.id}" data-voice-name="Join meeting with ${escapeHtml(m.studentName || 'students')}" aria-label="Join meeting with ${escapeHtml(m.studentName || 'students')}" style="border-radius:8px; font-weight:700;">
                       <i class="ph ph-video-camera"></i> ${m.status === 'ONGOING' ? '● Join Live' : 'Join Room'}
                     </button>
                     ${gcalUrl ? `<a href="${gcalUrl}" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-secondary" style="border-radius:8px;" title="Add to Google Calendar"><i class="ph ph-google-logo"></i></a>` : ''}
-                    <button class="btn btn-sm btn-secondary btn-ics-export" data-id="${m.id}" style="border-radius:8px;" title="Download .ICS invite"><i class="ph ph-calendar-plus"></i></button>
+                    <button class="btn btn-sm btn-secondary btn-ics-export" data-id="${m.id}" data-voice-name="Download calendar invite for ${escapeHtml(m.studentName || 'students')}" aria-label="Download calendar invite for ${escapeHtml(m.studentName || 'students')}" style="border-radius:8px;" title="Download .ICS invite"><i class="ph ph-calendar-plus"></i></button>
                   </div>
                   <div style="display:flex; gap:6px;">
                     <button class="btn btn-sm btn-secondary note-btn" data-id="${m.id}" style="border-radius:8px;">📝 Notes &amp; MOM</button>
@@ -305,9 +308,48 @@ export async function render(container) {
       });
     });
 
+    panel.querySelectorAll('.ai-support-plan-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const meeting = meetings.find(item => item.id === btn.dataset.id);
+        if (!meeting) return;
+        const student = students.find(item => item.id === meeting.studentId) || {};
+        btn.disabled = true;
+        btn.innerHTML = '<i class="ph ph-spinner ph-spin"></i> Preparing…';
+        try {
+          const agenda = await AIService.generateMeetingAgenda({
+            meetingType: 'Academic and attendance support check-in',
+            topic: meeting.supportSummary || meeting.description,
+            studentName: meeting.studentName || student.name,
+            department: meeting.department || user.department,
+            supportSignals: meeting.supportSignals || [],
+            supportMetrics: meeting.supportMetrics || {},
+            studentProfile: student,
+          });
+          const recordedContext = meeting.supportSummary || meeting.description || 'Recorded academic support indicators';
+          const description = `${agenda}\n\n### Recorded indicators\n${recordedContext}`;
+          await MeetingService.update(meeting.id, { description, aiGeneratedAgenda: true });
+          meeting.description = description;
+          meeting.aiGeneratedAgenda = true;
+          showToast('AI support agenda prepared and saved. Review it before confirming the meeting time.', 'success');
+          renderCurrentView();
+        } catch (error) {
+          showToast(error.message || 'Could not prepare the AI support agenda.', 'error');
+          btn.disabled = false;
+          btn.innerHTML = '<i class="ph ph-sparkle"></i> AI support plan';
+        }
+      });
+    });
+
     panel.querySelectorAll('.rej-btn').forEach(btn => {
       btn.addEventListener('click', async () => {
-        const reason = prompt('Enter rejection reason (optional):', 'Unavailable at the requested time');
+        const meeting = meetings.find(item => item.id === btn.dataset.id);
+        const studentName = meeting?.studentName || 'this student';
+        const reason = await requestVoiceInput({
+          title: `Reject meeting request for ${studentName}`,
+          label: `Reason for rejecting meeting with ${studentName}`,
+          value: 'Unavailable at the requested time',
+          confirmLabel: `Reject meeting for ${studentName}`,
+        });
         if (reason === null) return;
         try {
           await MeetingService.update(btn.dataset.id, { status:'REJECTED', rejectionReason: reason || 'Unavailable' });
@@ -706,7 +748,8 @@ export async function render(container) {
         meetingType: type,
         topic: type,
         studentName: studentName,
-        department: dept
+        department: dept,
+        studentProfile: selectedStudent || {},
       });
       const descEl = container.querySelector('#sched-desc');
       if (descEl) descEl.value = agenda;

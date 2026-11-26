@@ -215,10 +215,26 @@ Format strictly as:
   /**
    * Specialized In-Context Helper: Generate a structured agenda for a mentorship meeting.
    */
-  async generateMeetingAgenda({ meetingType, topic, studentName, department }) {
+  async generateMeetingAgenda({ meetingType, topic, studentName, department, supportSignals = [], supportMetrics = {}, studentProfile = {} }) {
+    const profile = studentProfile || {};
+    const metrics = {
+      attendance: supportMetrics.attendance ?? profile.attendance,
+      attendanceSessions: supportMetrics.attendanceSessions ?? profile.attendanceSessions,
+      cgpa: supportMetrics.cgpa ?? profile.cgpa,
+      latestSGPA: supportMetrics.latestSGPA ?? profile.latestSGPA,
+      latestSubjectAverage: supportMetrics.latestSubjectAverage ?? profile.latestSubjectAverage,
+    };
+    const verifiedMetrics = Object.entries(metrics)
+      .filter(([, value]) => value !== null && value !== undefined && value !== '')
+      .map(([key, value]) => `${key}: ${value}`)
+      .join('\n');
     const prompt = `Generate a concise 4-point agenda (total 25 mins) for this mentorship session in under 100 words.
 Student/Target: ${studentName || 'Mentee'} | Department: ${department || 'General'} | Topic: ${topic || meetingType || 'Academic Review'}
+Recorded support signals: ${supportSignals.length ? supportSignals.join(', ') : 'none supplied'}
+Verified student metrics (use only what is present):
+${verifiedMetrics || 'No metrics supplied'}
 
+Use a respectful, strengths-based tone. Do not diagnose, infer causes, or assume register completeness. Include a record-check, the student's perspective, practical support options based on the supplied indicators, and an agreed follow-up.
 Format strictly with ### Agenda, bullet points with bold titles and time allocation.`;
 
     const res = await this.chat({

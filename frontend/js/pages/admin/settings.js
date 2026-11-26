@@ -13,6 +13,7 @@ import {
   updateDoc, increment, writeBatch, setDoc, getDoc
 } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
 import { escapeHtml } from '/js/utils.js';
+import { confirmVoiceAction } from '/js/components/voice-dialog.js';
 
 
 
@@ -327,7 +328,7 @@ export async function render(container) {
                       <option value="IN_PROGRESS" ${iss.status==='IN_PROGRESS'?'selected':''}>Set: IN PROGRESS</option>
                       <option value="RESOLVED" ${iss.status==='RESOLVED'?'selected':''}>Set: RESOLVED</option>
                     </select>
-                    <button class="btn btn-ghost btn-sm delete-issue-btn" data-id="${iss.id}" style="color:var(--danger);" title="Delete Record">
+                    <button class="btn btn-ghost btn-sm delete-issue-btn" data-id="${iss.id}" style="color:var(--danger);" title="Delete Record" data-voice-confirm="false">
                       🗑 Delete
                     </button>
                   </div>
@@ -373,7 +374,7 @@ export async function render(container) {
           const targetBtn = e.currentTarget || e.target.closest('.delete-issue-btn');
           const issueId = targetBtn?.dataset?.id;
           if (!issueId) return;
-          if (!confirm('Delete this web issue report permanently?')) return;
+          if (!await confirmVoiceAction('Delete this web issue report permanently?')) return;
           try {
             await WebIssueService.deleteIssue(issueId);
             showToast('Web issue deleted', 'info');
@@ -568,8 +569,8 @@ export async function render(container) {
 
   renderMitCells();
 
-  document.getElementById('btn-reset-alloc').addEventListener('click', () => {
-    if (confirm('Are you sure you want to reset ALL mentor allocations? This cannot be undone.')) {
+  document.getElementById('btn-reset-alloc').addEventListener('click', async () => {
+    if (await confirmVoiceAction('Reset ALL mentor allocations? This cannot be undone.')) {
       showToast('Allocations reset (offline mode)', 'warning');
     }
   });
@@ -590,7 +591,7 @@ export async function render(container) {
     list.innerHTML = sections.map((sec, i) => `
       <span class="badge badge-info" style="display:flex;align-items:center;gap:6px;font-size:0.85rem;padding:6px 12px;">
         ${escapeHtml(sec)}
-        <button class="btn-del-section" data-idx="${i}" style="background:none;border:none;color:currentColor;cursor:pointer;opacity:0.7;padding:0;">✕</button>
+        <button class="btn-del-section" data-idx="${i}" style="background:none;border:none;color:currentColor;cursor:pointer;opacity:0.7;padding:0;" aria-label="Delete section ${escapeHtml(sec)}" data-voice-confirm="false">✕</button>
       </span>
     `).join('');
 
@@ -599,7 +600,7 @@ export async function render(container) {
         const targetBtn = e.currentTarget || e.target.closest('.btn-del-section');
         const idx = parseInt(targetBtn?.dataset?.idx);
         if (isNaN(idx)) return;
-        if(!confirm('Delete this section?')) return;
+        if(!await confirmVoiceAction('Delete this section?')) return;
         const removed = sections.splice(idx, 1);
         renderSections();
         try {
@@ -990,7 +991,7 @@ export async function render(container) {
             ✅ = Kept (oldest). 🗑 = Duplicate to delete.
           </p>
         </div>
-        <button class="btn btn-danger btn-sm" id="btn-delete-all-dupes" style="white-space:nowrap;">
+        <button class="btn btn-danger btn-sm" id="btn-delete-all-dupes" style="white-space:nowrap;" data-voice-confirm="false">
           🗑 Delete All ${allExtras.length} Duplicates
         </button>
       </div>
@@ -1048,7 +1049,7 @@ export async function render(container) {
         const col      = targetBtn?.dataset?.col;
         const mentorId = targetBtn?.dataset?.mentor;
         if (!id) return;
-        if (!confirm(`Delete this duplicate record (ID: ${id.slice(0,12)}…)? This cannot be undone.`)) return;
+        if (!await confirmVoiceAction(`Delete this duplicate record (ID: ${id.slice(0,12)}…)? This cannot be undone.`)) return;
         targetBtn.disabled = true; targetBtn.textContent = '…';
         try {
           await deleteDuplicateRecord(id, col, mentorId);
@@ -1063,7 +1064,7 @@ export async function render(container) {
 
     // Wire "Delete All" button
     document.getElementById('btn-delete-all-dupes')?.addEventListener('click', async () => {
-      if (!confirm(`Delete ALL ${allExtras.length} duplicate records? This cannot be undone.`)) return;
+      if (!await confirmVoiceAction(`Delete ALL ${allExtras.length} duplicate records? This cannot be undone.`)) return;
       const btn = document.getElementById('btn-delete-all-dupes');
       btn.disabled = true;
       btn.innerHTML = '<div class="spinner" style="width:14px;height:14px;border-width:2px;display:inline-block;margin-right:6px;"></div> Deleting…';

@@ -8,6 +8,7 @@ import { showToast } from '/js/components/toast.js';
 import { MeetingService, TaskService, NotificationService } from '/js/services.js';
 import { exportMeetingSessionReport } from '/js/report-export.js';
 import { AIService } from '/js/services/ai-service.js';
+import { confirmVoiceAction, requestVoiceInput } from '/js/components/voice-dialog.js';
 
 const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, char => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;'
@@ -68,7 +69,7 @@ export async function render(container) {
             <span class="rec-bar-mode" id="rec-bar-mode"></span>
             <div class="rec-bar-actions">
               <button class="rec-bar-btn" id="btn-rec-pause" title="Pause/Resume">⏸️</button>
-              <button class="rec-bar-btn rec-bar-stop" id="btn-rec-stop" title="Stop & Save">⏹ Stop</button>
+              <button class="rec-bar-btn rec-bar-stop" id="btn-rec-stop" title="Stop & Save" data-voice-name="Stop and save recording">⏹ Stop</button>
               <button class="rec-bar-btn rec-bar-extract" id="btn-rec-extract" title="AI Auto-Extract notes from transcript">⚡ AI Extract</button>
             </div>
           </div>
@@ -97,11 +98,11 @@ export async function render(container) {
                   <span class="meeting-live-dot"></span>
                   <span id="meeting-timer-text">Connecting...</span>
                 </span>
-                <span class="network-health-pill" id="btn-network-diag" title="Click to view network diagnostics">
+                <span class="network-health-pill" id="btn-network-diag" role="button" tabindex="0" aria-label="Network diagnostics" title="Click to view network diagnostics">
                   <span class="meeting-live-dot" style="background:#34d399; box-shadow:0 0 8px #34d399;"></span>
                   <span id="network-status-text">HD 1080p • 24ms</span>
                 </span>
-                <span class="pomodoro-pill" id="btn-pomodoro-timer" title="Click to start 25m Focus / Deep Work Sprint">
+                <span class="pomodoro-pill" id="btn-pomodoro-timer" role="button" tabindex="0" aria-label="Start focus timer" title="Click to start 25m Focus / Deep Work Sprint">
                   <span>⏱️</span>
                   <span id="pomodoro-text">Sprint 25m</span>
                 </span>
@@ -418,7 +419,7 @@ export async function render(container) {
                 </div>
 
                 <!-- In-Room File & Assignment Dropzone -->
-                <div class="meet-dropzone" id="in-room-dropzone">
+                <div class="meet-dropzone" id="in-room-dropzone" role="button" tabindex="0" aria-label="Choose a file to upload">
                   <i class="ph ph-file-arrow-up" style="font-size:1.8rem; color:#818cf8; margin-bottom:4px; display:block;"></i>
                   <div style="font-size:0.82rem; font-weight:600; color:#e2e8f0;">Drop resume, assignment or scorecard</div>
                   <div style="font-size:0.7rem; color:#94a3b8; margin-top:2px;">PDF, DOCX, PNG (In-Call Share)</div>
@@ -841,7 +842,7 @@ export async function render(container) {
             </button>` : ''}
 
             <!-- End / Leave Call -->
-            <button class="control-btn end-call" id="btn-end" title="Leave Meeting">
+            <button class="control-btn end-call" id="btn-end" title="Leave Meeting" aria-label="${isMentor ? 'End meeting' : 'Leave meeting'}" data-voice-name="${isMentor ? 'End meeting' : 'Leave meeting'}" data-voice-confirm="false">
               <span class="control-btn-icon">
                 <svg viewBox="0 0 24 24" fill="currentColor" width="24" height="24"><path d="M12 9c-1.6 0-3.15.25-4.6.72v3.1c0 .39-.23.74-.56.9-.98.49-1.87 1.12-2.66 1.85-.18.18-.43.28-.7.28-.28 0-.53-.11-.71-.29L.29 13.08c-.18-.17-.29-.42-.29-.7 0-.28.11-.53.29-.71C3.34 8.78 7.46 7 12 7s8.66 1.78 11.71 4.67c.18.18.29.43.29.71 0 .28-.11.52-.29.71l-2.48 2.48c-.18.18-.43.29-.71.29-.27 0-.52-.11-.7-.28-.79-.74-1.69-1.36-2.67-1.85-.33-.16-.56-.5-.56-.9v-3.1C15.15 9.25 13.6 9 12 9z"/></svg>
               </span>
@@ -1352,7 +1353,7 @@ export async function render(container) {
                     <div class="participant-actions">
                         <button class="btn-part-action" onclick="window.muteMic('${person.id}')" title="Mute Participant Microphone">🔇</button>
                         <button class="btn-part-action" onclick="window.stopCam('${person.id}')" title="Stop Participant Video">📷✕</button>
-                        <button class="btn-part-action danger" onclick="window.removeUser('${person.id}')" title="Remove from Call">🚫</button>
+                    <button class="btn-part-action danger" data-voice-confirm="false" data-voice-name="Remove ${escapeHtml(person.name || 'participant')} from meeting" aria-label="Remove ${escapeHtml(person.name || 'participant')} from meeting" onclick="window.removeUser('${person.id}')" title="Remove from Call">🚫</button>
                     </div>
                 ` : ''}
             </div>
@@ -1370,9 +1371,10 @@ export async function render(container) {
 
   window.admitUser = (id) => handleControlAction(id, 'admit');
   window.denyUser = (id) => handleControlAction(id, 'deny');
-  window.removeUser = (id) => {
-    if (confirm("Are you sure you want to remove this participant?")) {
-      handleControlAction(id, 'remove');
+  window.removeUser = async (id) => {
+    const participant = participants.find(item => item.id === id);
+    if (await confirmVoiceAction(`Remove ${participant?.name || 'this participant'} from the meeting?`)) {
+      await handleControlAction(id, 'remove');
     }
   };
   window.muteMic = (id) => {
@@ -2368,9 +2370,9 @@ export async function render(container) {
   }
 
   if (btnRecord && recordModal) {
-    btnRecord.onclick = () => {
+    btnRecord.onclick = async () => {
       if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-        if (confirm('Stop recording and save the file?')) {
+        if (await confirmVoiceAction('Stop the recording and save the file?')) {
           mediaRecorder.stop();
         }
         return;
@@ -2749,8 +2751,8 @@ export async function render(container) {
     });
   });
 
-  document.getElementById('btn-trigger-custom-poll')?.addEventListener('click', () => {
-    const q = prompt('Enter custom poll question:', 'Are you ready for the upcoming technical assessment?');
+    document.getElementById('btn-trigger-custom-poll')?.addEventListener('click', async () => {
+    const q = await requestVoiceInput({ title: 'Create a meeting poll', label: 'Poll question', value: 'Are you ready for the upcoming technical assessment?', confirmLabel: 'Launch poll' });
     if (!q) return;
     document.getElementById('poll-question-text').textContent = q;
     pollVotes = { 'Yes / Confident': 0, 'Need Clarification': 0, 'Not Ready': 0 };
@@ -2884,7 +2886,7 @@ export async function render(container) {
           <input type="color" id="wb-color" value="#4f46e5" style="width:28px; height:28px; border:none; border-radius:50%; cursor:pointer; background:transparent;">
           <input type="range" id="wb-size" min="1" max="24" value="4" style="width:60px; cursor:pointer;" title="Stroke Thickness">
           <div style="width:1px; height:20px; background:#475569; margin:0 4px;"></div>
-          <button class="wb-tool-btn" id="wb-clear-btn" title="Clear Canvas"><i class="ph ph-trash"></i></button>
+          <button class="wb-tool-btn" id="wb-clear-btn" title="Clear Canvas" aria-label="Clear whiteboard" data-voice-confirm="false"><i class="ph ph-trash"></i></button>
         </div>
 
         <div style="display:flex; align-items:center; gap:8px;">
@@ -2994,7 +2996,7 @@ export async function render(container) {
     canvas.addEventListener('mouseleave', () => { drawing = false; });
 
     wbRoot.querySelector('#wb-clear-btn').onclick = async () => {
-      if (confirm('Clear the entire whiteboard canvas?')) {
+      if (await confirmVoiceAction('Clear the entire whiteboard canvas?')) {
         ctx.fillStyle = '#ffffff';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
         await signaling.sendWhiteboard('clear');
@@ -3253,13 +3255,13 @@ export async function render(container) {
   let breakoutTimer = null;
   let breakoutRemainingSec = 300;
 
-  document.getElementById('btn-launch-breakouts')?.addEventListener('click', () => {
-    const roomCount = prompt('How many Breakout Rooms to create? (e.g. 2 or 3):', '2');
+  document.getElementById('btn-launch-breakouts')?.addEventListener('click', async () => {
+    const roomCount = await requestVoiceInput({ title: 'Create breakout rooms', label: 'Number of rooms (2–3)', value: '2', inputType: 'number', confirmLabel: 'Continue' });
     if (!roomCount) return;
     const num = parseInt(roomCount, 10) || 2;
     const roomNames = Array.from({ length: num }, (_, i) => `Squad ${i + 1} (Focus Group)`);
 
-    const confirmStart = confirm(`Launch ${num} Breakout Rooms for 5 minutes?\n\n• ${roomNames.join('\n• ')}`);
+    const confirmStart = await confirmVoiceAction(`Launch ${num} breakout rooms for 5 minutes? ${roomNames.join(', ')}.`);
     if (!confirmStart) return;
 
     signaling.sendBreakout('start', { roomNames, duration: 300 });
@@ -3503,7 +3505,7 @@ export async function render(container) {
   document.querySelectorAll('.tag-moment-btn').forEach(btn => {
     btn.addEventListener('click', async () => {
       const tag = btn.dataset.tag;
-      const note = prompt(`Add optional note for moment "${tag}":`, '');
+      const note = await requestVoiceInput({ title: `Add a note to ${tag}`, label: 'Optional note', value: '', confirmLabel: 'Save note' });
       const timeStr = timerText ? timerText.textContent : '00:00';
       addKeyMoment(tag, note);
       await signaling.sendKeyMoment(tag, note || '', timeStr);
@@ -3511,9 +3513,9 @@ export async function render(container) {
   });
 
   document.getElementById('btn-add-quick-moment')?.addEventListener('click', async () => {
-    const customTag = prompt('Enter custom tag name (e.g. 🔴 LAB EXAM, 🟢 PROJECT DEMO):', '📌 IMPORTANT HIGHLIGHT');
+    const customTag = await requestVoiceInput({ title: 'Add a key moment', label: 'Key moment tag', value: 'IMPORTANT HIGHLIGHT', confirmLabel: 'Continue' });
     if (!customTag) return;
-    const note = prompt('Optional description / details:', '');
+    const note = await requestVoiceInput({ title: 'Describe the key moment', label: 'Optional description', value: '', confirmLabel: 'Save key moment' });
     const timeStr = timerText ? timerText.textContent : '00:00';
     addKeyMoment(customTag, note);
     await signaling.sendKeyMoment(customTag, note || '', timeStr);
@@ -3538,9 +3540,9 @@ export async function render(container) {
   const doubtQueue = [];
 
   document.getElementById('btn-raise-doubt-modal')?.addEventListener('click', async () => {
-    const question = prompt('What is your question / doubt for the mentor?', '');
+    const question = await requestVoiceInput({ title: 'Ask the mentor a question', label: 'Question or doubt', value: '', confirmLabel: 'Continue' });
     if (!question) return;
-    const category = prompt('Category (e.g. Theory, Coding, Backlog, Internship):', 'Theory');
+    const category = await requestVoiceInput({ title: 'Choose a question category', label: 'Category', value: 'Theory', confirmLabel: 'Send question' });
     
     addDoubtToQueue(user.name, question, category || 'General');
     await signaling.sendDoubt(question, category || 'General');
@@ -3876,7 +3878,7 @@ ${actionSummary}
 
   document.getElementById('btn-pomodoro-timer')?.addEventListener('click', async () => {
     if (!pomodoroRunning) {
-      const choice = prompt('Choose Pomodoro Sprint Duration in Minutes:\n• 25 (Standard Deep Work)\n• 15 (Problem Solving Sprint)\n• 5 (Doubt Clearance Sprint)', '25');
+      const choice = await requestVoiceInput({ title: 'Start a focus sprint', label: 'Sprint duration in minutes: 25, 15, or 5', value: '25', inputType: 'number', confirmLabel: 'Start sprint' });
       if (!choice) return;
       const mins = parseInt(choice, 10) || 25;
       startPomodoroTimer(mins * 60);
@@ -4383,7 +4385,7 @@ ${actionSummary}
 
   document.getElementById('btn-end')?.addEventListener('click', async () => {
     if (isMentor) {
-      const endForAll = confirm("Do you want to end this meeting for EVERYONE?\n\n✔️ Click OK to End for Everyone and prepare meeting notes\n❌ Click Cancel to Leave without ending for others");
+      const endForAll = await confirmVoiceAction('End this meeting for everyone and prepare the meeting notes?');
       if (endForAll) {
         // Show Post-Call Mentor Report Generation Modal with Stepper
         const mentorModal = document.getElementById('mentor-post-call-modal');

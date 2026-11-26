@@ -10,6 +10,7 @@ import { showToast } from '/js/components/toast.js';
 import { parseImportFile, isRowObjectEmpty } from '/js/excel-import.js';
 import { exportMentorStudentReport, exportSingleMentorReport } from '/js/report-export.js';
 import { getAttendanceStatus, AttendanceInterventionService } from '/js/services/academic-service.js';
+import { confirmVoiceAction } from '/js/components/voice-dialog.js';
 
 function riskBadge(r) {
   const cls = {HIGH:'badge-danger',MEDIUM:'badge-warning',LOW:'badge-success'}[r]||'badge-muted';
@@ -536,7 +537,7 @@ const highRiskList = (students || [])
           </div>
           <div style="padding:16px; display:flex; gap:12px; align-items:center;">
             <button id="btn-hod-download-template" class="btn btn-secondary">⬇️ Download Template</button>
-            <label class="btn btn-primary" style="margin:0;cursor:pointer;">
+            <label class="btn btn-primary" style="margin:0;cursor:pointer;" data-voice-name="Bulk Import users" data-voice-confirm="false">
               📁 Bulk Import (CSV / Excel)
               <input type="file" id="hod-csv-upload" accept=".csv, .xlsx, .xls" style="display:none;">
             </label>
@@ -808,7 +809,7 @@ const highRiskList = (students || [])
         const file = e.target.files[0];
         if (!file) return;
 
-        if (!confirm(`Are you sure you want to bulk import users into ${dept}?`)) {
+        if (!await confirmVoiceAction(`Bulk import users into ${dept}?`)) {
           e.target.value = '';
           return;
         }
@@ -918,13 +919,13 @@ const highRiskList = (students || [])
         list.innerHTML = classes.map(c => `
           <span class="badge badge-info" style="display:inline-flex;align-items:center;gap:6px;font-size:0.85rem;padding:6px 12px;">
             Class ${c.className}
-            <button class="btn-del-class" data-id="${c.id}" style="background:none;border:none;color:currentColor;cursor:pointer;opacity:0.7;margin-left:4px;" title="Delete class">✕</button>
+            <button class="btn-del-class" data-id="${c.id}" style="background:none;border:none;color:currentColor;cursor:pointer;opacity:0.7;margin-left:4px;" title="Delete class" aria-label="Delete class ${escapeHtml(c.className || '')}" data-voice-confirm="false">✕</button>
           </span>
         `).join('');
 
         container.querySelectorAll('.btn-del-class').forEach(btn => {
           btn.addEventListener('click', async () => {
-            if(!confirm('Delete this class?')) return;
+            if(!await confirmVoiceAction('Delete this class?')) return;
             try {
               await ClassService.delete(btn.dataset.id);
               showToast('Class deleted', 'success');

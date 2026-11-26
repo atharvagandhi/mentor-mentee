@@ -5,10 +5,10 @@
 // Client-Side Router
 // Hash-based SPA router with role-based route guards, lazy page loading, and retry logic.
 import { onAuthChange, getCurrentUser, fetchUserProfile, getUserProfile } from './auth.js';
-import { initNotificationListener, stopNotificationListener, renderNotifications } from './notifications.js';
+import { initNotificationListener, stopNotificationListener, renderNotifications } from './notifications.js?v=2';
 import { openWebIssueModal } from './components/web-issue-modal.js';
-import { initAIAssistant, aiAssistantWidget } from './components/ai-assistant-widget.js?v=21';
-import { initVoiceAssistant } from './components/voice-assistant.js?v=1';
+import { initAIAssistant, aiAssistantWidget } from './components/ai-assistant-widget.js?v=22';
+import { initVoiceAssistant } from './components/voice-assistant.js?v=3';
 import { onLanguageChange } from './i18n.js';
 import { escapeHtml } from './utils.js';
 
@@ -234,7 +234,7 @@ async function handleRoute() {
     for (let attempt = 1; attempt <= 3; attempt++) {
       try {
         const cacheBuster = attempt > 1 ? `&_retry=${Date.now()}` : '';
-        module = await import(`${modulePath}?v=16${cacheBuster}`);
+      module = await import(`${modulePath}?v=17${cacheBuster}`);
         break;
       } catch (err) {
         lastImportError = err;

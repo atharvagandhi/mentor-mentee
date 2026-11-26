@@ -93,6 +93,19 @@ The platform includes a built-in, Google Meet-style video conferencing tool that
 * **Attendance:** Admins use the Attendance tab on the Admin Dashboard to mark class registers or upload a CSV attendance register. Attendance percentages and risk summaries are recalculated on the student profile; attendance at or below 40% is flagged as Low Attendance for students and mentors.
 * **Student and Mentor Views:** Students can see their semester results and attendance history in Academic Record. Assigned mentors see the updated course, year, result summary, attendance, and risk status in their student lists.
 
+### Automated Student Support Meetings
+
+* The platform creates a mentor meeting request when recorded attendance is **40% or lower**, CGPA/latest SGPA is **below 6.0/10**, or the latest subject average is **below 50%**. Missing records do not count as low attendance or low marks.
+* Each request is linked to the student's assigned mentor. The mentor and student receive notifications, and the request stays pending until the mentor chooses a meeting time.
+* Attendance recalculation, result publication, mentor assignment, and mentor dashboard review all check for eligible students. Requests are deduplicated for the same active concern and can be raised again after the student recovers and the concern returns.
+* Mentors can generate and save an AI meeting agenda using the recorded support signals. The agenda asks the mentor to confirm records with the student and does not guess why attendance or marks are low.
+
+### Voice Controls
+
+* The microphone assistant works across the role-based pages, including meeting controls. After pressing **Start speaking**, it listens continuously until the user says “stop”. Users can name a page, say a visible button or link, fill or clear a labeled field, choose a menu option, or ask the AI copilot a question.
+* Examples: “open meetings”, “arrange support meeting for Asha”, “fill topic with exam planning”, “select Tuesday from meeting day”, and “read this page”.
+* Approval, rejection, deletion, publishing, sign-out, and form submission actions ask for a spoken “confirm”. Read-aloud pauses during a live call to prevent audio feedback.
+
 ## Directory Structure
 
 * `/frontend/index.html`: The main entry point.

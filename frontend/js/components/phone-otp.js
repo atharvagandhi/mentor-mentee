@@ -1,4 +1,5 @@
 import { api } from '/js/api.js';
+import { confirmVoiceAction } from '/js/components/voice-dialog.js';
 
 let controlSequence = 0;
 
@@ -34,7 +35,7 @@ export class PhoneOtpController {
     controls.innerHTML = `
       <button type="button" class="btn btn-secondary btn-sm" data-phone-send>Send code</button>
       <span class="phone-otp-status" data-phone-status role="status">${currentVerified ? 'Number verified' : this.initialValue ? 'Verify if you change this number' : 'Enter a number to verify it'}</span>
-      ${this.initialValue ? '<button type="button" class="btn btn-ghost btn-sm" data-phone-remove>Remove</button>' : ''}
+      ${this.initialValue ? '<button type="button" class="btn btn-ghost btn-sm" data-phone-remove data-voice-confirm="false" data-voice-name="Remove verified phone number">Remove</button>' : ''}
       <div class="phone-otp-code-row" data-phone-code-row hidden>
         <input type="text" class="form-input" data-phone-code inputmode="numeric" autocomplete="one-time-code" maxlength="8" placeholder="SMS code" aria-label="SMS verification code">
         <button type="button" class="btn btn-primary btn-sm" data-phone-verify>Verify</button>
@@ -174,7 +175,7 @@ export class PhoneOtpController {
   }
 
   async removeNumber() {
-    if (!this.initialValue || !confirm('Remove this phone number?')) return;
+    if (!this.initialValue || !await confirmVoiceAction('Remove this phone number from your profile?')) return;
     this.removeButton.disabled = true;
     try {
       await api.post('/profile/phone/verify', { scope: this.scope, field: this.field, phone: '', phoneProofToken: '' });

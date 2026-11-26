@@ -12,6 +12,8 @@ import { StatsService, MeetingService, NotificationService, BookletService } fro
 import { startTour } from '/js/components/tour.js';
 import { getAttendanceStatus, AttendanceInterventionService } from '/js/services/academic-service.js';
 import { escapeHtml } from '/js/utils.js';
+import { api } from '/js/api.js';
+import { confirmVoiceAction } from '/js/components/voice-dialog.js';
 
 function riskBadge(r) {
   const cls = { HIGH: 'badge-danger', MEDIUM: 'badge-warning', LOW: 'badge-success' }[r] || 'badge-muted';
@@ -53,8 +55,8 @@ function renderPendingMeetings(pendingMeetings) {
       </div>
       <div style="display:flex;gap:8px;width:100%;align-items:center;">
         <input type="datetime-local" class="form-input sched-input" data-id="${m.id}" value="${m.preferredDate || m.scheduledAt || ''}" style="flex:1;padding:6px 10px;font-size:0.78rem;">
-        <button class="btn btn-sm btn-success approve-btn" data-id="${m.id}" data-name="${m.studentName || 'this student'}">Approve</button>
-        <button class="btn btn-sm btn-danger reject-btn" data-id="${m.id}" data-name="${m.studentName || 'this student'}">Reject</button>
+        <button class="btn btn-sm btn-success approve-btn" data-voice-confirm="false" data-id="${m.id}" data-name="${escapeHtml(m.studentName || 'this student')}" data-voice-name="Approve meeting for ${escapeHtml(m.studentName || 'student')}" aria-label="Approve meeting for ${escapeHtml(m.studentName || 'student')}">Approve</button>
+        <button class="btn btn-sm btn-danger reject-btn" data-voice-confirm="false" data-id="${m.id}" data-name="${escapeHtml(m.studentName || 'this student')}" data-voice-name="Reject meeting for ${escapeHtml(m.studentName || 'student')}" aria-label="Reject meeting for ${escapeHtml(m.studentName || 'student')}">Reject</button>
       </div>
     </div>
   `).join('');
@@ -159,6 +161,7 @@ export async function render(container) {
   `;
 
   try {
+    await api.post('/mentor/support-interventions/scan', {}).catch(() => null);
     const data = await StatsService.getMentorStats(user.id, true) || {};
     const students = data.students || [];
     const meetings = data.meetings || [];
@@ -262,7 +265,7 @@ export async function render(container) {
           showToast('Select a date/time first', 'warning');
           return;
         }
-        if (!confirm(`Are you sure you want to approve this meeting for ${btn.dataset.name}?`)) return;
+        if (!await confirmVoiceAction(`Approve this meeting for ${btn.dataset.name}?`)) return;
 
         try {
           await MeetingService.update(btn.dataset.id, { status: 'APPROVED', scheduledAt });
@@ -283,7 +286,7 @@ export async function render(container) {
 
     dash.querySelectorAll('.reject-btn').forEach(btn => {
       btn.addEventListener('click', async () => {
-        if (!confirm(`Are you sure you want to reject this meeting for ${btn.dataset.name}?`)) return;
+        if (!await confirmVoiceAction(`Reject this meeting for ${btn.dataset.name}?`)) return;
         try {
           await MeetingService.update(btn.dataset.id, {
             status: 'REJECTED',

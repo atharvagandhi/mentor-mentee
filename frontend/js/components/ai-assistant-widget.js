@@ -7,6 +7,7 @@ import { AIService } from '/js/services/ai-service.js';
 import { getAISuggestions } from '/js/components/ai-suggestions.js';
 import { getUserProfile } from '/js/auth.js';
 import { showToast } from '/js/components/toast.js';
+import { confirmVoiceAction } from '/js/components/voice-dialog.js';
 
 function getCurrentRoute() {
   return window.location.hash.slice(1).split('?')[0] || '/';
@@ -135,7 +136,7 @@ class AIAssistantWidget {
             </div>
           </div>
           <div class="lumina-ai-header-actions">
-            <button class="lumina-ai-btn-icon" id="lumina-ai-clear-btn" title="Clear Conversation">
+            <button class="lumina-ai-btn-icon" id="lumina-ai-clear-btn" title="Clear Conversation" data-voice-confirm="false" aria-label="Clear AI conversation">
               <i class="ph ph-trash"></i>
             </button>
             <button class="lumina-ai-btn-icon" id="lumina-ai-close-btn" title="Close (Ctrl + /)">
@@ -388,8 +389,8 @@ class AIAssistantWidget {
     closeBtn?.addEventListener('click', () => this.toggleWindow(false));
 
     // Clear history
-    clearBtn?.addEventListener('click', () => {
-      if (confirm('Clear AI Assistant conversation history?')) {
+    clearBtn?.addEventListener('click', async () => {
+      if (await confirmVoiceAction('Clear AI Assistant conversation history?')) {
         this.messages = [];
         this.suggestionPage = 0;
         this.saveHistory();

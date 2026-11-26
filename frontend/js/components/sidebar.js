@@ -126,7 +126,7 @@ document.body.addEventListener('click', async (e) => {
   if (aiCopilotItem) {
     e.preventDefault();
     try {
-      const { aiAssistantWidget } = await import('/js/components/ai-assistant-widget.js?v=21');
+      const { aiAssistantWidget } = await import('/js/components/ai-assistant-widget.js?v=22');
       aiAssistantWidget.toggleWindow(true);
     } catch (err) {
       console.error('Failed to open AI Copilot:', err);

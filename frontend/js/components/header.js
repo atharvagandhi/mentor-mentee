@@ -77,7 +77,7 @@ export function createHeader(title, user, notificationCount = 0) {
         <a id="global-pdf-guide-btn" href="${guidePdf}" download="${pdfFileName}" target="_blank" title="${t('header.pdf_guide_title', 'Download Role Operating Manual (PDF)')}" class="header-icon-btn" style="background: rgba(16, 185, 129, 0.12); color: #10b981; text-decoration: none; display: flex; align-items: center; justify-content: center;">
           <i class="ph ph-file-pdf" style="font-size:1.4rem;"></i>
         </a>
-        <div class="notification-bell" id="global-notification-bell">
+        <div class="notification-bell" id="global-notification-bell" role="button" tabindex="0" aria-label="Notifications">
           <i class="ph ph-bell" style="font-size:1.5rem;"></i>
           <span id="global-notification-badge" class="notification-badge" style="display:none;"></span>
           <div class="notification-dropdown" id="global-notification-dropdown">
@@ -90,7 +90,7 @@ export function createHeader(title, user, notificationCount = 0) {
             </div>
           </div>
         </div>
-        <div class="header-user-profile-btn flex items-center gap-3" id="global-header-profile-btn" style="cursor:pointer;padding:4px 12px 4px 6px;border-radius:24px;background:var(--bg-secondary);border:1px solid var(--border);transition:all 0.2s;user-select:none;" title="${t('header.profile_tooltip', 'Click to view & edit Profile')}">
+        <div class="header-user-profile-btn flex items-center gap-3" id="global-header-profile-btn" role="button" tabindex="0" aria-label="Open profile" style="cursor:pointer;padding:4px 12px 4px 6px;border-radius:24px;background:var(--bg-secondary);border:1px solid var(--border);transition:all 0.2s;user-select:none;" title="${t('header.profile_tooltip', 'Click to view & edit Profile')}">
           <div class="avatar avatar-sm">${initial}</div>
           <span class="header-user-name" style="font-weight:600;font-size:0.875rem;">${escapeHtml(user?.name || 'User')}</span>
           <i class="ph ph-caret-down" style="font-size:0.8rem;color:var(--text-muted);"></i>

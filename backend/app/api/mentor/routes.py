@@ -30,6 +30,18 @@ def get_dashboard(user = Depends(get_mentor_user), mentor_service: MentorService
 def get_students(user = Depends(get_mentor_user), mentor_service: MentorService = Depends()):
     return mentor_service.get_assigned_students(user['uid'])
 
+
+@router.post("/support-interventions/scan")
+def scan_student_support_interventions(user=Depends(get_mentor_user)):
+    """Catch up existing records when a mentor opens their student workspace."""
+    from app.services.intervention_service import ensure_student_support_meeting
+
+    created = 0
+    for student in StudentRepository().get_by_mentor(user["uid"]):
+        result = ensure_student_support_meeting(student.get("id"))
+        created += int(bool(result and result.get("created")))
+    return {"scanned": True, "newRequests": created}
+
 @router.get("/students/{student_id}")
 def get_student_detail(student_id: str, user = Depends(get_mentor_user), mentor_service: MentorService = Depends()):
     return mentor_service.get_student_detail(user['uid'], student_id)

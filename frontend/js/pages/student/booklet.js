@@ -97,7 +97,7 @@ export async function render(container) {
                                             <i class="ph ph-spinner ph-spin" style="font-size:2rem;"></i>
                                         </div>
                                     </div>
-                                    <label class="btn btn-sm btn-secondary" style="width: 100%; cursor: pointer; text-align: center;">
+                                    <label class="btn btn-sm btn-secondary" data-voice-name="Upload profile photo" style="width: 100%; cursor: pointer; text-align: center;">
                                         <i class="ph ph-upload-simple"></i> Upload Photo
                                         <input type="file" id="profile-photo-upload" accept="image/*" style="display: none;">
                                     </label>

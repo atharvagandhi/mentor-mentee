@@ -8,6 +8,7 @@ import { StudentService, FacultyService, AllocationService, DepartmentService } 
 import { getMentorsForSelectedClasses, exportMultiClassMentorsReport } from '/js/report-export.js';
 import { openMultiClassMentorsModal } from '/js/components/multi-class-mentors-modal.js';
 import { escapeHtml } from '/js/utils.js';
+import { confirmVoiceAction } from '/js/components/voice-dialog.js';
 
 export async function render(container) {
   const user = getUserProfile();
@@ -272,8 +273,8 @@ export async function render(container) {
               ${allDepartments.map(d => `<option value="${escapeHtml(d.value)}">${escapeHtml(d.label)}</option>`).join('')}
             </select>
             <div style="display:flex;gap:10px;flex-wrap:wrap;">
-              <button class="btn btn-secondary" style="flex:1;min-width:120px;" id="btn-auto">Run Auto-Allocate</button>
-              <button class="btn btn-danger" style="flex:1;min-width:140px;background:var(--danger);color:#fff;" id="btn-unallot-all" title="Unallot all students to reset for academic year change">
+              <button class="btn btn-secondary" style="flex:1;min-width:120px;" id="btn-auto" data-voice-confirm="false">Run Auto-Allocate</button>
+              <button class="btn btn-danger" style="flex:1;min-width:140px;background:var(--danger);color:#fff;" id="btn-unallot-all" title="Unallot all students to reset for academic year change" data-voice-confirm="false" data-voice-name="Reset or unallot all students">
                 <i class="ph ph-arrow-counter-clockwise"></i> Reset / Unallot All
               </button>
             </div>
@@ -582,9 +583,9 @@ export async function render(container) {
               <td style="color:var(--text-muted);font-size:0.825rem;">${a.department}</td>
               <td style="text-align:right;">
                 <div style="display:inline-flex;gap:4px;flex-wrap:wrap;justify-content:flex-end;">
-                  ${a.mentorId ? `<button class="btn btn-xs btn-secondary btn-unassign-primary" data-id="${a.studentId}" title="Unassign Primary Mentor">Unassign 1st</button>` : ''}
-                  ${a.secondaryMentorId ? `<button class="btn btn-xs btn-secondary btn-unassign-secondary" data-id="${a.studentId}" title="Unassign Secondary Mentor">Unassign 2nd</button>` : ''}
-                  ${(a.mentorId && a.secondaryMentorId) ? `<button class="btn btn-xs btn-danger btn-unassign-both" data-id="${a.studentId}" style="background:var(--danger);color:#fff;" title="Unassign Both Mentors">Unassign All</button>` : ''}
+                  ${a.mentorId ? `<button class="btn btn-xs btn-secondary btn-unassign-primary" data-id="${a.studentId}" title="Unassign Primary Mentor" data-voice-confirm="false">Unassign 1st</button>` : ''}
+                  ${a.secondaryMentorId ? `<button class="btn btn-xs btn-secondary btn-unassign-secondary" data-id="${a.studentId}" title="Unassign Secondary Mentor" data-voice-confirm="false">Unassign 2nd</button>` : ''}
+                  ${(a.mentorId && a.secondaryMentorId) ? `<button class="btn btn-xs btn-danger btn-unassign-both" data-id="${a.studentId}" style="background:var(--danger);color:#fff;" title="Unassign Both Mentors" data-voice-confirm="false">Unassign All</button>` : ''}
                 </div>
               </td>
             </tr>
@@ -612,7 +613,7 @@ export async function render(container) {
     tableWrap.querySelectorAll('.btn-unassign-primary').forEach(btn => {
       btn.addEventListener('click', async (e) => {
         const id = e.currentTarget.dataset.id;
-        if (!confirm('Unassign Primary Mentor from this student?')) return;
+        if (!await confirmVoiceAction('Unassign Primary Mentor from this student?')) return;
         btn.disabled = true; btn.textContent = '...';
         try {
           await StudentService.unassignMentor(id, 'primary');
@@ -629,7 +630,7 @@ export async function render(container) {
     tableWrap.querySelectorAll('.btn-unassign-secondary').forEach(btn => {
       btn.addEventListener('click', async (e) => {
         const id = e.currentTarget.dataset.id;
-        if (!confirm('Unassign Co-Mentor from this student?')) return;
+        if (!await confirmVoiceAction('Unassign Co-Mentor from this student?')) return;
         btn.disabled = true; btn.textContent = '...';
         try {
           await StudentService.unassignMentor(id, 'secondary');
@@ -646,7 +647,7 @@ export async function render(container) {
     tableWrap.querySelectorAll('.btn-unassign-both').forEach(btn => {
       btn.addEventListener('click', async (e) => {
         const id = e.currentTarget.dataset.id;
-        if (!confirm('Unassign ALL mentors from this student?')) return;
+        if (!await confirmVoiceAction('Unassign ALL mentors from this student?')) return;
         btn.disabled = true; btn.textContent = '...';
         try {
           await StudentService.unassignMentor(id, 'all');
@@ -776,7 +777,7 @@ export async function render(container) {
     if (btnAuto) {
       btnAuto.addEventListener('click', async () => {
         const dept = container.querySelector('#auto-dept').value || null;
-        if (!confirm(`Are you sure you want to auto-allocate unassigned students${dept ? ` in ${dept}` : ''}?`)) return;
+        if (!await confirmVoiceAction(`Are you sure you want to auto-allocate unassigned students${dept ? ` in ${dept}` : ''}?`)) return;
 
         btnAuto.disabled = true;
         btnAuto.textContent = 'Allocating...';
@@ -804,7 +805,7 @@ export async function render(container) {
       btnUnallot.addEventListener('click', async () => {
         const dept = container.querySelector('#auto-dept').value || null;
         const targetDesc = dept ? `all students in ${dept}` : 'ALL students across all departments';
-        if (!confirm(`⚠️ ACADEMIC YEAR RESET CONFIRMATION:\n\nAre you sure you want to UNALLOT ${targetDesc}?\n\nThis will clear all current mentor assignments so you can cleanly re-allocate students for the new academic year.`)) return;
+        if (!await confirmVoiceAction(`Academic year reset: unassign ${targetDesc}? This will clear current mentor assignments.`)) return;
 
         btnUnallot.disabled = true;
         btnUnallot.textContent = 'Resetting...';

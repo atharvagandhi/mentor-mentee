@@ -6,6 +6,7 @@ import { createHeader } from '/js/components/header.js';
 import { DepartmentService, FacultyService, SettingsService } from '/js/services.js';
 import { showToast } from '/js/components/toast.js';
 import { escapeHtml } from '/js/utils.js';
+import { confirmVoiceAction } from '/js/components/voice-dialog.js';
 
 export async function render(container) {
   const user = getUserProfile();
@@ -104,7 +105,7 @@ export async function render(container) {
         const newHeadId = e.target.value;
         const oldHead = faculty.find(f => f.department === deptName && (f.role === 'HOD' || f.role === 'SECTION_HEAD'));
 
-        if (!confirm('Are you sure you want to reassign the department head?')) {
+        if (!await confirmVoiceAction('Reassign the department head?')) {
           e.target.value = oldHead ? oldHead.id : '';
           return;
         }
@@ -132,7 +133,7 @@ export async function render(container) {
       btn.addEventListener('click', async (e) => {
         const id = e.currentTarget?.dataset?.id || e.target.closest('.btn-del')?.dataset?.id;
         if (!id) return;
-        if (!confirm('Are you sure you want to delete this department? All associated classes will remain orphaned.')) return;
+        if (!await confirmVoiceAction('Delete this department? All associated classes will remain orphaned.')) return;
         try {
           await DepartmentService.delete(id);
           showToast('Department deleted', 'success');
@@ -160,7 +161,7 @@ export async function render(container) {
       list.innerHTML = sections.map((sec, i) => `
         <span class="badge badge-info" style="display:flex;align-items:center;gap:6px;font-size:0.85rem;padding:6px 12px;">
           ${escapeHtml(sec)}
-          <button class="btn-del-section" data-idx="${i}" style="background:none;border:none;color:currentColor;cursor:pointer;opacity:0.7;padding:0;">✕</button>
+          <button class="btn-del-section" data-idx="${i}" aria-label="Delete section ${escapeHtml(sec)}" data-voice-confirm="false" style="background:none;border:none;color:currentColor;cursor:pointer;opacity:0.7;padding:0;">✕</button>
         </span>
       `).join('');
 
@@ -169,7 +170,7 @@ export async function render(container) {
           const targetBtn = e.currentTarget || e.target.closest('.btn-del-section');
           const idx = parseInt(targetBtn?.dataset?.idx);
           if (isNaN(idx)) return;
-          if (!confirm('Delete this section?')) return;
+          if (!await confirmVoiceAction('Delete this section?')) return;
           const removed = sections.splice(idx, 1);
           renderSections();
           try {

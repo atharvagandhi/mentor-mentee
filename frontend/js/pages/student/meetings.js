@@ -4,6 +4,7 @@ import { getUserProfile } from '/js/auth.js';
 import { navigateTo } from '/js/router.js';
 import { createSidebar } from '/js/components/sidebar.js';
 import { createHeader } from '/js/components/header.js';
+import { confirmVoiceAction } from '/js/components/voice-dialog.js';
 import { showToast } from '/js/components/toast.js';
 import { MeetingService, NotificationService, StudentService, AvailabilityService } from '/js/services.js';
 import { AIService } from '/js/services/ai-service.js';
@@ -493,7 +494,7 @@ Keep it structured, polite, and student-focused with clear discussion questions.
                 ` : ''}
 
                 ${m.status === 'REQUESTED' ? `
-                  <button class="btn btn-sm btn-secondary cancel-btn" data-id="${m.id}" style="border-radius:8px;">${t('meetings.btn_cancel') || 'Cancel Request'}</button>
+                  <button class="btn btn-sm btn-secondary cancel-btn" data-voice-confirm="false" data-id="${m.id}" data-voice-name="Cancel meeting request" style="border-radius:8px;">${t('meetings.btn_cancel') || 'Cancel Request'}</button>
                 ` : ''}
 
                 ${m.status === 'COMPLETED' ? `
@@ -575,7 +576,7 @@ Keep it structured, polite, and student-focused with clear discussion questions.
 
     wrap.querySelectorAll('.cancel-btn').forEach(b => {
       b.addEventListener('click', async () => {
-        if (!confirm('Are you sure you want to cancel this meeting request?')) return;
+        if (!await confirmVoiceAction('Cancel this meeting request?')) return;
         try {
           await MeetingService.update(b.dataset.id, { status: 'CANCELLED' });
           showToast('Meeting cancelled', 'info');

@@ -6,6 +6,7 @@ import { createHeader } from '/js/components/header.js';
 import { IssueService } from '/js/services.js';
 import { showToast } from '/js/components/toast.js';
 import { parseImportFile, isRowObjectEmpty } from '/js/excel-import.js';
+import { confirmVoiceAction } from '/js/components/voice-dialog.js';
 
 export async function render(container) {
   const user = getUserProfile();
@@ -56,7 +57,7 @@ export async function render(container) {
         </div>
         <div style="padding:16px; display:flex; gap:12px; align-items:center;">
           <button id="btn-sec-download-template" class="btn btn-secondary">⬇️ Download Template</button>
-          <label class="btn btn-primary" style="margin:0;cursor:pointer;">
+          <label class="btn btn-primary" style="margin:0;cursor:pointer;" data-voice-name="Bulk Import staff" data-voice-confirm="false">
             📁 Bulk Import (CSV / Excel)
             <input type="file" id="sec-csv-upload" accept=".csv, .xlsx, .xls" style="display:none;">
           </label>
@@ -93,7 +94,7 @@ export async function render(container) {
         const file = e.target.files[0];
         if (!file) return;
 
-        if (!confirm(`Are you sure you want to bulk import staff into ${user.department}?`)) {
+        if (!await confirmVoiceAction(`Bulk import staff into ${user.department}?`)) {
           e.target.value = '';
           return;
         }

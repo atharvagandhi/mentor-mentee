@@ -9,6 +9,7 @@ import { showToast } from '/js/components/toast.js';
 import { StudentService, FacultyService, DepartmentService, AllocationService, IssueService, StatsService } from '/js/services.js';
 import { escapeHtml } from '/js/utils.js';
 import { FinanceService } from '/js/services/academic-service.js';
+import { confirmVoiceAction } from '/js/components/voice-dialog.js';
 
 function timeAgo(iso) {
   const diff = Date.now() - new Date(iso).getTime();
@@ -213,7 +214,7 @@ export async function render(container) {
                   ${depts.map(d => `<option value="${d.name}">${d.name}</option>`).join('')}
                 </select>
               </div>
-              <button class="btn btn-primary" id="btn-auto-alloc">Auto Allocate</button>
+              <button class="btn btn-primary" id="btn-auto-alloc" data-voice-confirm="false">Auto Allocate</button>
             </div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
               <a href="#/admin/marks" class="btn btn-primary"><i class="ph ph-notebook"></i> Enter marks</a>
@@ -366,7 +367,7 @@ export async function render(container) {
 
     document.getElementById('btn-auto-alloc').addEventListener('click', async () => {
       const dept = document.getElementById('auto-dept').value || null;
-      if (!confirm(`Are you sure you want to auto-allocate unassigned students${dept ? ` in the ${dept} department` : ''}? This action cannot be easily undone.`)) return;
+      if (!await confirmVoiceAction(`Auto-allocate unassigned students${dept ? ` in the ${dept} department` : ''}? This action cannot be easily undone.`)) return;
       const btn = document.getElementById('btn-auto-alloc');
       btn.disabled = true; btn.textContent = 'Allocating...';
       try {

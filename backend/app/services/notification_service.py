@@ -5,7 +5,7 @@ class NotificationService:
     def __init__(self):
         self.notification_repo = NotificationRepository()
 
-    def create_notification(self, user_id: str, notif_type: str, title: str, message: str, related_id: str = None):
+    def create_notification(self, user_id: str, notif_type: str, title: str, message: str, related_id: str = None, notification_id: str = None):
         notif_data = {
             'userId': user_id,
             'type': notif_type,
@@ -17,7 +17,7 @@ class NotificationService:
             'repeat_notification': 345600,
             'show_notification': get_timestamp(),
         }
-        return self.notification_repo.create(notif_data)
+        return self.notification_repo.create(notif_data, doc_id=notification_id)
 
     def get_notifications(self, user_id: str, unread_only: bool = False):
         return self.notification_repo.get_by_user(user_id, unread_only)

@@ -6,6 +6,7 @@ import { createHeader } from '/js/components/header.js';
 import { StudentService, ClassService, FacultyService } from '/js/services.js';
 import { showToast } from '/js/components/toast.js';
 import { departmentScope, escapeHtml } from '/js/utils.js';
+import { requestVoiceInput } from '/js/components/voice-dialog.js';
 
 export async function render(container) {
   const user = getUserProfile();
@@ -117,7 +118,7 @@ export async function render(container) {
         const id = e.currentTarget?.dataset?.id || e.target.closest('.mentor-select')?.dataset?.id;
         if (!id) return;
         const newMentor = e.target.value || null;
-        const reason = prompt('Enter reason for mentor reassignment:', 'Workload Balancing / Academic Reassignment');
+        const reason = await requestVoiceInput({ title: 'Mentor reassignment', label: 'Reason for reassignment', value: 'Workload Balancing / Academic Reassignment' });
         if (reason === null) {
           // User cancelled prompt, reset selection
           e.target.value = e.target.getAttribute('data-prev') || '';
