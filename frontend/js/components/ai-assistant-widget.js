@@ -350,7 +350,7 @@ class AIAssistantWidget {
     return this.messages.map((m, index) => {
       const isUser = m.role === 'user';
       const timeStr = m.time || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      const formattedContent = isUser ? escapeHtml(m.content) : AIService.formatMarkdown(m.content);
+      const formattedContent = isUser ? escapeHtml(m.displayContent ?? m.content) : AIService.formatMarkdown(m.content);
 
       return `
         <div class="lumina-ai-msg ${isUser ? 'user' : 'assistant'}" data-index="${index}">
@@ -480,6 +480,7 @@ class AIAssistantWidget {
     // Custom Event Listener for in-context triggers
     window.addEventListener('lumina:ai-prompt', (e) => {
       const prompt = e.detail?.prompt;
+      const displayText = e.detail?.displayText || prompt;
       const autoSend = e.detail?.autoSend !== false;
       const studentId = e.detail?.studentId || null;
       if (studentId && String(studentId) !== this.contextStudentId) {
@@ -492,9 +493,9 @@ class AIAssistantWidget {
       if (prompt) {
         if (autoSend) {
           const contextReady = studentId ? this.refreshAttendanceContext(studentId) : Promise.resolve();
-          contextReady.then(() => this.sendMessage(prompt, studentId));
+          contextReady.then(() => this.sendMessage(prompt, studentId, displayText));
         } else if (textarea) {
-          textarea.value = prompt;
+          textarea.value = displayText;
           textarea.focus();
         }
       }
@@ -521,7 +522,7 @@ class AIAssistantWidget {
     }
   }
 
-  async sendMessage(text, studentId = null) {
+  async sendMessage(text, studentId = null, displayText = text) {
     if (!text) return;
     if (this.isLoading) {
       window.dispatchEvent(new CustomEvent('lumina:ai-response', { detail: { text: 'The assistant is still working on a response. Please try again in a moment.' } }));
@@ -537,7 +538,7 @@ class AIAssistantWidget {
     const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
     // Append user message
-    const userMsg = { role: 'user', content: text, time: timeStr };
+    const userMsg = { role: 'user', content: text, displayContent: displayText, time: timeStr };
     this.messages.push(userMsg);
     this.saveHistory();
 
@@ -550,7 +551,7 @@ class AIAssistantWidget {
     if (body) {
       const userBubbleHtml = `
         <div class="lumina-ai-msg user">
-          <div class="lumina-ai-bubble">${escapeHtml(text)}</div>
+          <div class="lumina-ai-bubble">${escapeHtml(displayText)}</div>
           <div class="lumina-ai-msg-meta"><span>${timeStr}</span></div>
         </div>
       `;

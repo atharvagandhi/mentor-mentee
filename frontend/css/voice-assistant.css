@@ -26,12 +26,17 @@
 .lumina-voice-launcher i { font-size: 1.15rem; color: var(--accent, #4f46e5); }
 .lumina-voice-launcher[aria-expanded="true"] { outline: 2px solid var(--accent, #4f46e5); }
 #lumina-voice-assistant.is-listening .lumina-voice-launcher i { color: var(--danger, #dc2626); }
+#lumina-voice-assistant.is-listening .lumina-voice-launcher { border-color: var(--danger, #dc2626); }
+.lumina-voice-actions [data-voice-listen][aria-pressed="true"] { background: var(--danger, #dc2626); border-color: var(--danger, #dc2626); }
+.lumina-voice-actions [data-voice-listen][aria-pressed="true"]:hover { filter: brightness(.94); }
 
 .lumina-voice-panel {
   position: absolute;
   left: 0;
   bottom: 60px;
   width: min(360px, calc(100vw - 32px));
+  max-height: min(70vh, 520px);
+  overflow-y: auto;
   padding: 16px;
   border: 1px solid var(--border, #dbe1ea);
   border-radius: 16px;
@@ -49,7 +54,13 @@
 .lumina-voice-actions .btn { min-height: 38px; font-size: .78rem; }
 .lumina-voice-status, .lumina-voice-transcript { margin: 12px 0 0; color: var(--text-secondary, #475569); font-size: .78rem; line-height: 1.45; }
 .lumina-voice-status[data-state="error"] { color: var(--danger, #dc2626); }
+.lumina-voice-status[data-state="info"] { color: var(--text-secondary, #475569); }
 .lumina-voice-transcript { padding: 9px 10px; border-radius: 9px; background: var(--bg-secondary, #f1f5f9); }
+
+@media (prefers-reduced-motion: no-preference) {
+  #lumina-voice-assistant.is-listening .lumina-voice-launcher i { animation: lumina-voice-pulse 1.2s ease-in-out infinite; }
+  @keyframes lumina-voice-pulse { 50% { transform: scale(1.18); } }
+}
 
 @media (max-width: 600px) {
   #lumina-voice-assistant { left: 12px; bottom: 12px; }

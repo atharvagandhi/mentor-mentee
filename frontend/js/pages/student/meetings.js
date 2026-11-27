@@ -64,7 +64,7 @@ export async function render(container) {
             </div>
 
             <!-- Request Meeting Action -->
-            <button class="btn btn-primary" id="btn-new" style="display:flex; align-items:center; gap:8px; border-radius:12px; font-weight:700; padding:10px 20px; box-shadow:0 4px 12px rgba(99, 102, 241, 0.25);">
+            <button class="btn btn-primary" id="btn-new" data-voice-name="Request a mentor meeting" style="display:flex; align-items:center; gap:8px; border-radius:12px; font-weight:700; padding:10px 20px; box-shadow:0 4px 12px rgba(99, 102, 241, 0.25);">
               <i class="ph ph-calendar-plus" style="font-size:1.2rem;"></i> ${t('meetings.btn_request') || 'Book / Request Meeting'}
             </button>
           </div>
@@ -91,14 +91,14 @@ export async function render(container) {
 
             <div class="form-group" style="margin-bottom:14px;" id="target-mentor-group">
               <label class="form-label" style="font-weight:600;">Choose Mentor to Meet With</label>
-              <select id="m-target-mentor" class="form-select" style="border-radius:10px;">
+              <select id="m-target-mentor" class="form-select" data-voice-name="meeting mentor" aria-label="Choose mentor to meet with" style="border-radius:10px;">
                 <option value="">Loading assigned mentors...</option>
               </select>
             </div>
 
             <div class="form-group" style="margin-bottom:14px;">
               <label class="form-label" style="font-weight:600;">Meeting Topic / Scope</label>
-              <select id="m-type" class="form-select" style="border-radius:10px;">${TYPES.map(t=>`<option>${t}</option>`).join('')}</select>
+              <select id="m-type" class="form-select" data-voice-name="meeting topic" aria-label="Meeting topic" style="border-radius:10px;">${TYPES.map(t=>`<option>${t}</option>`).join('')}</select>
             </div>
 
             <div class="form-group" style="margin-bottom:14px;">
@@ -108,7 +108,7 @@ export async function render(container) {
                   <i class="ph-bold ph-sparkle"></i> ✨ AI Suggest Questions &amp; Topics
                 </button>
               </div>
-              <textarea id="m-desc" class="form-textarea" placeholder="Explain the context, problems or questions you wish to discuss with your mentor..." style="border-radius:10px; min-height:80px;"></textarea>
+              <textarea id="m-desc" class="form-textarea" data-voice-name="meeting agenda" aria-label="Meeting agenda" placeholder="Explain the context, problems or questions you wish to discuss with your mentor..." style="border-radius:10px; min-height:80px;"></textarea>
             </div>
 
             <!-- Calendly-Style Slot Picker Section -->
@@ -116,7 +116,7 @@ export async function render(container) {
               <label class="form-label" style="font-weight:700; color:var(--primary); margin-bottom:6px; display:block;">
                 📅 Select Date to View Mentor's Open Slots:
               </label>
-              <input type="date" id="slot-date-picker" class="form-input" style="border-radius:8px; margin-bottom:12px; background:#fff;">
+              <input type="date" id="slot-date-picker" class="form-input" data-voice-name="open slot date" aria-label="Open slot date" style="border-radius:8px; margin-bottom:12px; background:#fff;">
               
               <div id="slots-container" style="display:flex; flex-wrap:wrap; gap:8px;">
                 <div style="font-size:0.8rem; color:var(--text-muted);">Choose a date above to load available time slots.</div>
@@ -126,12 +126,12 @@ export async function render(container) {
             <!-- Custom DateTime input (Hidden in slot mode) -->
             <div class="form-group" id="custom-date-section" style="display:none; margin-bottom:20px;">
               <label class="form-label" style="font-weight:600;">Preferred Date &amp; Time</label>
-              <input type="datetime-local" id="m-date" class="form-input" style="border-radius:10px;">
+              <input type="datetime-local" id="m-date" class="form-input" data-voice-name="meeting date and time" aria-label="Meeting date and time" style="border-radius:10px;">
             </div>
 
             <div style="display:flex; justify-content:flex-end; gap:10px;">
               <button class="btn btn-secondary" id="btn-cancel" style="border-radius:10px;">Cancel</button>
-              <button class="btn btn-primary" id="btn-submit" style="border-radius:10px; font-weight:700;"><i class="ph ph-calendar-plus"></i> Schedule Now</button>
+              <button class="btn btn-primary" id="btn-submit" data-voice-name="Schedule meeting request" data-voice-confirm="true" aria-label="Schedule meeting request" style="border-radius:10px; font-weight:700;"><i class="ph ph-calendar-plus"></i> Schedule Now</button>
             </div>
           </div>
 

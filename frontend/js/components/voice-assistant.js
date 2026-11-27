@@ -1,4 +1,5 @@
 import { getUserProfile } from '/js/auth.js';
+import { AIService } from '/js/services/ai-service.js';
 
 const VOICE_CONTAINER_ID = 'lumina-voice-assistant';
 const LANGUAGE_MAP = { en: 'en-IN', hi: 'hi-IN', mr: 'mr-IN' };
@@ -35,8 +36,18 @@ class VoiceAssistant {
     this.isSpeaking = false;
     this.speechMutedUntil = 0;
     this.speakNextAIResponse = false;
+    this.lastCommandText = '';
     this.pendingAction = null;
     this.bound = false;
+    this.voiceSessionId = 0;
+    this.restartTimer = null;
+    this.mediaRecorder = null;
+    this.recordingStream = null;
+    this.recordingChunks = [];
+    this.recordingFallback = false;
+    this.transcribeRecordingOnStop = false;
+    this.recordingTimeout = null;
+    this.speechSequence = 0;
   }
 
   mount() {
@@ -52,13 +63,13 @@ class VoiceAssistant {
         <i class="ph ph-microphone" aria-hidden="true"></i><span>Voice</span>
       </button>
       <div class="lumina-voice-panel" data-voice-panel hidden aria-label="Voice assistant">
-        <div class="lumina-voice-heading"><div><strong>Voice assistant</strong><p>Speak a page name, a button or link label, “fill [field] with [text]”, or ask a question.</p></div><button type="button" data-voice-close aria-label="Close voice assistant">×</button></div>
+        <div class="lumina-voice-heading"><div><strong>Voice assistant</strong><p>Say “open meetings”, “fill topic with exam planning”, “make a study plan”, or “quiz me on algebra”.</p></div><button type="button" data-voice-close aria-label="Close voice assistant">×</button></div>
         <div class="lumina-voice-actions">
-          <button type="button" class="btn btn-primary" data-voice-listen><i class="ph ph-microphone"></i> Start speaking</button>
+          <button type="button" class="btn btn-primary" data-voice-listen aria-label="Start voice input" aria-pressed="false"><i class="ph ph-microphone" aria-hidden="true"></i> Start speaking</button>
           <button type="button" class="btn btn-secondary" data-voice-read><i class="ph ph-speaker-high"></i> Read this page</button>
           <button type="button" class="btn btn-ghost" data-voice-stop><i class="ph ph-stop"></i> Stop</button>
         </div>
-        <p class="lumina-voice-status" data-voice-status role="status" aria-live="polite">Press the microphone, then say “open meetings”, “click save”, or “fill topic with exam planning”.</p>
+        <p class="lumina-voice-status" data-voice-status role="status" aria-live="polite">Press Start, then speak naturally. Voice works on buttons and forms and can ask Lumina AI for study plans, quizzes, and meeting preparation.</p>
         <p class="lumina-voice-transcript" data-voice-transcript hidden></p>
       </div>`;
     document.body.appendChild(container);
@@ -71,7 +82,10 @@ class VoiceAssistant {
     this.bound = true;
     this.container.querySelector('[data-voice-toggle]')?.addEventListener('click', () => this.togglePanel());
     this.container.querySelector('[data-voice-close]')?.addEventListener('click', () => this.togglePanel(false));
-    this.container.querySelector('[data-voice-listen]')?.addEventListener('click', () => this.startListening());
+    this.container.querySelector('[data-voice-listen]')?.addEventListener('click', () => {
+      if (this.voiceSessionActive) this.stopAll();
+      else this.startListening();
+    });
     this.container.querySelector('[data-voice-read]')?.addEventListener('click', () => this.readPage());
     this.container.querySelector('[data-voice-stop]')?.addEventListener('click', () => this.stopAll());
 
@@ -92,11 +106,14 @@ class VoiceAssistant {
     const launcher = this.container?.querySelector('[data-voice-toggle]');
     if (!panel || !launcher) return;
     const open = force === null ? panel.hidden : force;
+    if (!open && this.voiceSessionActive) this.stopAll();
     panel.hidden = !open;
     launcher.setAttribute('aria-expanded', String(open));
     if (open) {
       window.dispatchEvent(new CustomEvent('lumina:voice-opened'));
-      this.setStatus(this.getRecognition() ? 'Say a page name, button or link label, “fill [field] with [text]”, or ask a question.' : 'Voice input is unavailable in this browser. Read aloud is still available.');
+      this.setStatus(this.getRecognition()
+        ? 'Speak naturally: navigate, activate visible controls, fill forms, request a mentor meeting, or ask for an AI study plan or quiz.'
+        : 'This browser will record one voice command at a time. Press Stop after speaking to transcribe it.');
     }
   }
 
@@ -106,6 +123,7 @@ class VoiceAssistant {
       status.textContent = message;
       status.dataset.state = state;
     }
+    if (state === 'error' && !/no speech detected/i.test(message)) this.announce(message);
   }
 
   setTranscript(text) {
@@ -128,31 +146,44 @@ class VoiceAssistant {
   startListening(resume = false) {
     const SpeechRecognition = this.getRecognition();
     if (!SpeechRecognition) {
-      this.setStatus('Voice input is not supported by this browser. Try Chrome or Edge.', 'error');
+      this.startRecordingFallback();
       return;
     }
     if (!resume) {
+      this.voiceSessionId += 1;
       this.voiceSessionActive = true;
       this.stopSpeech();
     }
+    const sessionId = this.voiceSessionId;
+    clearTimeout(this.restartTimer);
     if (this.recognition) {
       this.recognition.onend = null;
       this.recognition.onerror = null;
       try { this.recognition.abort(); } catch (_) {}
+      this.recognition = null;
     }
-    const recognition = new SpeechRecognition();
+    let recognition;
+    try { recognition = new SpeechRecognition(); }
+    catch (_) {
+      this.voiceSessionActive = false;
+      this.setStatus('Voice recognition could not start. Check microphone access and try again.', 'error');
+      return;
+    }
     this.recognition = recognition;
     recognition.lang = this.language();
     recognition.continuous = true;
     recognition.interimResults = true;
     recognition.maxAlternatives = 1;
     recognition.onstart = () => {
+      if (sessionId !== this.voiceSessionId || this.recognition !== recognition) return;
       this.isListening = true;
+      this.recordingFallback = false;
       this.container?.classList.add('is-listening');
-      this.container?.querySelector('[data-voice-listen]')?.setAttribute('aria-pressed', 'true');
-      this.setStatus('Listening… speak now.');
+      this.updateListenButton(true);
+      this.setStatus('Listening… speak a command or question.');
     };
     recognition.onresult = event => {
+      if (sessionId !== this.voiceSessionId || this.recognition !== recognition) return;
       let finalText = '';
       let interimText = '';
       for (let index = event.resultIndex; index < event.results.length; index++) {
@@ -165,33 +196,148 @@ class VoiceAssistant {
         if (this.isSpeaking || Date.now() < this.speechMutedUntil) return;
         const text = finalText.trim();
         this.setTranscript(text);
-        this.handleTranscript(text);
+        this.handleTranscript(text).catch(error => {
+          console.error('Voice command failed:', error);
+          this.setStatus('I could not complete that voice command. Please try again.', 'error');
+        });
       }
     };
     recognition.onerror = event => {
+      if (sessionId !== this.voiceSessionId || this.recognition !== recognition || event.error === 'aborted') return;
       const message = event.error === 'not-allowed' || event.error === 'service-not-allowed'
         ? 'Microphone access is blocked. Allow it in your browser settings, then try again.'
-        : event.error === 'no-speech' ? 'No speech detected. Press the microphone and try again.'
-          : 'Voice input stopped. Press the microphone to try again.';
-      this.setStatus(message, 'error');
+        : event.error === 'audio-capture' ? 'No microphone was found. Connect or enable a microphone, then try again.'
+          : event.error === 'network' ? 'Speech recognition lost its network connection. Check the connection and start again.'
+            : event.error === 'no-speech' ? 'I did not hear speech. Keep speaking or try again.'
+              : 'Voice input stopped. Check microphone access and try again.';
+      this.setStatus(message, event.error === 'no-speech' ? 'info' : 'error');
       if (event.error !== 'no-speech') this.voiceSessionActive = false;
     };
     recognition.onend = () => {
+      if (sessionId !== this.voiceSessionId || this.recognition !== recognition) return;
       this.isListening = false;
       this.container?.classList.remove('is-listening');
-      this.container?.querySelector('[data-voice-listen]')?.setAttribute('aria-pressed', 'false');
+      this.recognition = null;
       if (this.voiceSessionActive && this.container?.isConnected) {
-        this.setStatus('Still listening. Say “stop” to pause voice control.');
-        setTimeout(() => {
-          if (this.voiceSessionActive && this.container?.isConnected && this.recognition === recognition) this.startListening(true);
-        }, 250);
-      } else if (this.container?.isConnected && this.container.querySelector('[data-voice-status]')?.textContent === 'Listening… speak now.') {
+        this.updateListenButton(true);
+        if (!this.isSpeaking) {
+          this.setStatus('Reconnecting microphone…');
+          this.restartTimer = setTimeout(() => {
+            if (this.voiceSessionActive && this.container?.isConnected && sessionId === this.voiceSessionId) this.startListening(true);
+          }, 450);
+        }
+      } else if (this.container?.isConnected && this.container.querySelector('[data-voice-status]')?.textContent.startsWith('Listening')) {
+        this.updateListenButton(false);
         this.setStatus('Ready. Press the microphone when you want to speak.');
-      }
+      } else this.updateListenButton(false);
     };
     this.setTranscript('');
     try { recognition.start(); }
-    catch (_) { this.setStatus('Voice input is already active. Wait a moment and try again.', 'error'); }
+    catch (error) {
+      this.recognition = null;
+      this.isListening = false;
+      if (error?.name === 'InvalidStateError' && this.voiceSessionActive && sessionId === this.voiceSessionId) {
+        this.restartTimer = setTimeout(() => this.startListening(true), 700);
+      } else {
+        this.voiceSessionActive = false;
+        this.updateListenButton(false);
+        this.setStatus('Voice input could not start. Check microphone access, then try again.', 'error');
+      }
+    }
+  }
+
+  updateListenButton(listening) {
+    const button = this.container?.querySelector('[data-voice-listen]');
+    if (!button) return;
+    button.setAttribute('aria-pressed', String(listening));
+    button.setAttribute('aria-label', listening ? 'Stop voice input' : 'Start voice input');
+    button.innerHTML = listening
+      ? '<i class="ph ph-stop" aria-hidden="true"></i> Stop speaking'
+      : '<i class="ph ph-microphone" aria-hidden="true"></i> Start speaking';
+  }
+
+  async startRecordingFallback() {
+    if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
+      this.setStatus('Voice input is unavailable here. Use Chrome or Edge with microphone access enabled.', 'error');
+      return;
+    }
+    this.voiceSessionId += 1;
+    const sessionId = this.voiceSessionId;
+    this.voiceSessionActive = true;
+    this.recordingFallback = true;
+    this.stopSpeech();
+    this.setStatus('Requesting microphone access…');
+    let stream = null;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      if (!this.voiceSessionActive || sessionId !== this.voiceSessionId || !this.container?.isConnected) {
+        stream.getTracks().forEach(track => track.stop());
+        return;
+      }
+      const preferredType = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4']
+        .find(type => MediaRecorder.isTypeSupported?.(type));
+      const recorder = preferredType ? new MediaRecorder(stream, { mimeType: preferredType }) : new MediaRecorder(stream);
+      this.recordingStream = stream;
+      this.mediaRecorder = recorder;
+      this.recordingChunks = [];
+      this.transcribeRecordingOnStop = true;
+      recorder.ondataavailable = event => { if (event.data?.size) this.recordingChunks.push(event.data); };
+      recorder.onerror = () => this.setStatus('Microphone recording failed. Check the microphone and try again.', 'error');
+      recorder.onstop = () => this.transcribeRecording(recorder, sessionId);
+      recorder.start(250);
+      this.isListening = true;
+      this.container?.classList.add('is-listening');
+      this.updateListenButton(true);
+      this.setStatus('Recording… say one command, then press Stop to process it.');
+      this.recordingTimeout = setTimeout(() => this.stopAll(), 30_000);
+    } catch (error) {
+      stream?.getTracks().forEach(track => track.stop());
+      this.recordingStream?.getTracks().forEach(track => track.stop());
+      this.recordingStream = null;
+      this.mediaRecorder = null;
+      this.voiceSessionActive = false;
+      this.recordingFallback = false;
+      this.isListening = false;
+      this.updateListenButton(false);
+      const message = error?.name === 'NotAllowedError'
+        ? 'Microphone access is blocked. Allow it in your browser settings, then try again.'
+        : 'Could not access the microphone. Check its connection and browser permissions.';
+      this.setStatus(message, 'error');
+    }
+  }
+
+  async transcribeRecording(recorder, sessionId) {
+    clearTimeout(this.recordingTimeout);
+    this.recordingStream?.getTracks().forEach(track => track.stop());
+    this.recordingStream = null;
+    this.mediaRecorder = null;
+    this.recordingFallback = false;
+    this.isListening = false;
+    this.container?.classList.remove('is-listening');
+    this.updateListenButton(false);
+    const chunks = this.recordingChunks;
+    this.recordingChunks = [];
+    const shouldTranscribe = this.transcribeRecordingOnStop;
+    this.transcribeRecordingOnStop = false;
+    if (!shouldTranscribe || !chunks.length) {
+      if (shouldTranscribe) this.setStatus('No audio was captured. Press the microphone and try again.', 'error');
+      return;
+    }
+    this.setStatus('Transcribing your voice command…');
+    try {
+      const blob = new Blob(chunks, { type: recorder.mimeType || chunks[0]?.type || 'audio/webm' });
+      const text = await AIService.transcribeAudioBlob(blob);
+      if (sessionId !== this.voiceSessionId || !this.container?.isConnected) return;
+      this.setTranscript(text);
+      await this.handleTranscript(text);
+    } catch (error) {
+      if (sessionId !== this.voiceSessionId) return;
+      console.error('Voice transcription failed:', error);
+      const message = /sign in to transcribe/i.test(error.message || '')
+        ? 'Please sign in to use voice commands in this browser.'
+        : error.message || 'Could not transcribe this recording. Try again.';
+      this.setStatus(message, 'error');
+    }
   }
 
   isEditable(element) {
@@ -208,11 +354,13 @@ class VoiceAssistant {
     return this.lastFocusedElement?.isConnected && this.isVisible(this.lastFocusedElement) && this.isEditable(this.lastFocusedElement) ? this.lastFocusedElement : null;
   }
 
-  insertText(target, text) {
+  insertText(target, text, replace = false) {
     if (target instanceof HTMLSelectElement) {
       const normalized = text.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
       const options = Array.from(target.options).filter(option => !option.disabled && option.value);
-      const matched = options.find(option => option.textContent.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim() === normalized)
+      const words = this.queryWords(text);
+      const matched = options.find(option => this.normalizeForMatch(option.textContent) === this.normalizeForMatch(text))
+        || options.find(option => words.length && words.every(word => this.normalizeForMatch(option.textContent).includes(word)))
         || options.find(option => option.textContent.toLowerCase().includes(normalized) || normalized.includes(option.textContent.toLowerCase()));
       if (!matched) {
         this.setStatus(`No option matched “${text}”. Say the option name and try again.`, 'error');
@@ -295,7 +443,11 @@ class VoiceAssistant {
       text = text.toLowerCase().replace(/\bplus\b/g, '+').replace(/\b(zero|oh|one|two|three|four|five|six|seven|eight|nine)\b/g, word => digitWords[word]).replace(/[\s-]+/g, '');
     }
     target.focus();
-    if (target.isContentEditable) {
+    if (replace && target.isContentEditable) {
+      target.textContent = text;
+    } else if (replace) {
+      target.value = text;
+    } else if (target.isContentEditable) {
       const selection = window.getSelection();
       if (selection?.rangeCount) {
         const range = selection.getRangeAt(0);
@@ -355,7 +507,7 @@ class VoiceAssistant {
   }
 
   queryWords(value) {
-    const ignored = new Set(['the', 'a', 'an', 'button', 'link', 'tab', 'menu', 'item', 'option', 'please', 'for', 'to', 'on', 'in', 'me', 'my', 'this']);
+    const ignored = new Set(['the', 'a', 'an', 'button', 'link', 'tab', 'menu', 'item', 'option', 'please', 'for', 'to', 'on', 'in', 'me', 'my', 'this', 'and', 'with']);
     return this.normalizeForMatch(value).split(' ').filter(word => word && !ignored.has(word));
   }
 
@@ -397,12 +549,88 @@ class VoiceAssistant {
     return { query: query.slice(0, match.index).trim(), index: index > 0 ? index - 1 : null };
   }
 
-  async handleFieldCommand(command) {
-    const search = command.match(/^(?:please\s+)?search(?:\s+for)?\s+(.+)$/i);
+  voiceCoachPrompt(command) {
+    const normalized = String(command || '').trim()
+      .replace(/^(?:please\s+)?(?:help me|i want to|can you|could you)\s+/i, '');
+    const studyPlan = /\b(study|revision|exam(?:ination)? prep|catch[- ]?up|attendance recovery|academic recovery)\b.{0,24}\b(plan|timetable|schedule)\b|\b(plan|timetable|schedule)\b.{0,24}\b(study|revision|exam|catch[- ]?up|attendance|academic recovery)\b/i.test(normalized);
+    if (/^(?:please\s+)?(?:make|create|build|generate|plan)\b/i.test(normalized) && studyPlan) {
+      const subjectCandidate = normalized.match(/\b(?:for|on)\s+(.+)$/i)?.[1]?.trim();
+      const subject = subjectCandidate && !/^(?:(?:the|next|this|coming)\s+)?(?:one|two|three|four|1|2|3|4)?[- ]?weeks?\b/i.test(subjectCandidate)
+        ? subjectCandidate : '';
+      const duration = /\b(two[- ]weeks?|fortnight)\b/i.test(normalized) ? 'two weeks'
+        : /\b(month|four weeks?)\b/i.test(normalized) ? 'four weeks'
+          : /\b(today|daily|day)\b/i.test(normalized) ? 'one day' : 'one week';
+      return `Create a practical ${duration} study and learning recovery plan${subject ? ` for ${subject}` : ''}. Keep it supportive and realistic: focused study blocks, active recall, short breaks, a catch-up buffer, and a simple end-of-week review. Do not assume grades, attendance, available hours, or personal circumstances. State any assumptions briefly and ask at most one useful follow-up question. Answer in the same language as the student and keep it concise enough to read aloud.`;
+    }
+
+    const quiz = normalized.match(/^(?:please\s+)?(?:quiz|test)\s+me\s+(?:on|about)\s+(.+)$/i)
+      || normalized.match(/^(?:please\s+)?(?:give|make|create)\s+me\s+(?:a\s+)?(?:quiz|practice questions?)\s+(?:on|about)\s+(.+)$/i);
+    if (quiz) {
+      const topic = quiz[2] || quiz[1];
+      return `Run an interactive practice quiz on ${topic}. Ask only one clear question now and wait for my spoken or typed answer. After I answer, explain briefly, then ask the next question. Do not show the answer before I respond. Use the same language as the student.`;
+    }
+
+    if (/^(?:please\s+)?(?:prepare|plan)\s+(?:me\s+)?(?:for\s+)?(?:(?:my|the|next)\s+)?(?:mentor|mentorship)\s+meeting\b/i.test(normalized)
+      || /^(?:please\s+)?what should i discuss with my mentor\??$/i.test(normalized)) {
+      return 'Help me prepare for a mentor meeting. Give me a short, respectful agenda and a few open questions I can ask. Do not assume any attendance, marks, or personal circumstances. Include space to explain what support I want and agree on a follow-up. Answer in the same language as the student and keep it easy to read aloud.';
+    }
+    return null;
+  }
+
+  sendVoiceAIPrompt(prompt, fallbackMessage = 'Open the signed-in dashboard to use the AI coach.') {
+    if (!document.getElementById('lumina-ai-window')) {
+      this.setStatus(fallbackMessage, 'error');
+      return false;
+    }
+    this.speakNextAIResponse = true;
+    this.setStatus('Sending your request to the AI coach…');
+    window.dispatchEvent(new CustomEvent('lumina:ai-prompt', { detail: { prompt, displayText: this.lastCommandText || prompt, autoSend: true } }));
+    return true;
+  }
+
+  handleMeetingVoiceIntent(command) {
+    const isStudent = String(getUserProfile()?.role || '').toUpperCase() === 'STUDENT';
+    if (!isStudent) return false;
+    const bookingIntent = /^(?:please\s+)?(?:book|request|arrange|schedule|create|open|start)\s+(?:a\s+)?(?:(?:new|mentor|mentorship)\s+)*(?:meeting|session)\b/i.test(command)
+      || /^(?:please\s+)?(?:request|book|arrange)\s+(?:a\s+)?mentor meeting\b/i.test(command);
+    const submitIntent = /^(?:please\s+)?(?:schedule now|schedule (?:my )?(?:mentor )?meeting request|submit (?:my )?(?:meeting )?request|send (?:my )?meeting request|send request)$/i.test(command);
+    if (!bookingIntent && !submitIntent) return false;
+
+    if (!window.location.hash.startsWith('#/student/meetings')) {
+      window.location.hash = '#/student/meetings';
+      this.setStatus('Opening your meetings. When the page loads, say “arrange a meeting” to open the request form.');
+      this.announce('Opening your meetings.');
+      return true;
+    }
+    const form = document.getElementById('req-form');
+    if (!form || form.style.display === 'none') {
+      document.getElementById('btn-new')?.click();
+      this.setStatus('Meeting request form opened. Say a mentor name, fill the agenda and date, or select an open time slot.');
+      this.announce('Meeting request form opened. I can help you fill it in by voice.');
+      return true;
+    }
+    if (submitIntent) {
+      const button = document.getElementById('btn-submit');
+      if (!button || button.disabled) {
+        this.setStatus('The meeting request cannot be submitted yet. Complete the required fields first.', 'error');
+        return true;
+      }
+      this.pendingAction = { element: button, label: 'meeting request', expiresAt: Date.now() + 30_000 };
+      this.setStatus('Say “confirm” to send your meeting request to your mentor, or “cancel” to stop.');
+      this.announce('Your meeting request is ready. Say confirm to send it to your mentor, or cancel to stop.');
+      return true;
+    }
+    this.setStatus('The meeting request form is open. Choose a mentor, topic and time, then say “schedule now” to review the request.');
+    return bookingIntent;
+  }
+
+  async handleFieldCommand(command, originalCommand = command) {
+    const source = String(originalCommand || command).trim();
+    const search = source.match(/^(?:please\s+)?search(?:\s+for)?\s+(.+)$/i) || command.match(/^(?:please\s+)?search(?:\s+for)?\s+(.+)$/i);
     if (search) {
       const matches = this.findNamedFields('search').filter(item => item.element instanceof HTMLInputElement);
       if (matches.length === 1) {
-        this.insertText(matches[0].element, search[1]);
+        this.insertText(matches[0].element, search[1], true);
         matches[0].element.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
       } else {
         this.setStatus(matches.length ? 'I found multiple search boxes. Focus the section you want to search.' : 'There is no search box on this page.', 'error');
@@ -410,7 +638,9 @@ class VoiceAssistant {
       return true;
     }
 
-    const fill = command.match(/^(?:please\s+)?(?:fill|enter|type|write|set|put)\s+(.+?)\s+(?:with|to|as)\s+(.+)$/i)
+    const fill = source.match(/^(?:please\s+)?(?:fill|enter|type|write|set|put)\s+(.+?)\s+(?:with|to|as)\s+(.+)$/i)
+      || source.match(/^(?:please\s+)?(?:enter|type|write)\s+(.+?)\s+in(?:to)?\s+(.+)$/i)
+      || command.match(/^(?:please\s+)?(?:fill|enter|type|write|set|put)\s+(.+?)\s+(?:with|to|as)\s+(.+)$/i)
       || command.match(/^(?:please\s+)?(?:enter|type|write)\s+(.+?)\s+in(?:to)?\s+(.+)$/i);
     if (fill) {
       const fieldFirst = /^(?:please\s+)?(?:fill|set|put)\s+/i.test(command) || /\s+(?:with|to|as)\s+/i.test(command);
@@ -421,11 +651,11 @@ class VoiceAssistant {
         this.setStatus(matches.length ? `I found ${matches.length} fields named “${fieldQuery}”. Add the form or section name.` : `I could not find a field named “${fieldQuery}”.`, 'error');
         return true;
       }
-      this.insertText(matches[0].element, value);
+      this.insertText(matches[0].element, value, true);
       return true;
     }
 
-    const clear = command.match(/^(?:please\s+)?clear\s+(.+)$/i);
+    const clear = source.match(/^(?:please\s+)?clear\s+(.+)$/i) || command.match(/^(?:please\s+)?clear\s+(.+)$/i);
     if (clear) {
       const matches = this.findNamedFields(clear[1]);
       if (matches.length !== 1) {
@@ -443,7 +673,7 @@ class VoiceAssistant {
       return true;
     }
 
-    const focus = command.match(/^(?:please\s+)?(?:focus|move to)\s+(.+)$/i);
+    const focus = source.match(/^(?:please\s+)?(?:focus|move to)\s+(.+)$/i) || command.match(/^(?:please\s+)?(?:focus|move to)\s+(.+)$/i);
     if (focus) {
       const matches = this.findNamedFields(focus[1]);
       if (matches.length !== 1) {
@@ -459,9 +689,9 @@ class VoiceAssistant {
   }
 
   async handleControlCommand(command) {
-    const commandMatch = command.match(/^(?:please\s+)?(click|press|tap|activate|open|show|start|save|send|submit|approve|reject|delete|remove|cancel|end|resolve|escalate|publish|import|assign|request|arrange|schedule|create|add|generate|download|export|mark|join|view|edit|close|toggle|choose|select|filter)\s+(.+)$/i);
+    const commandMatch = command.match(/^(?:please\s+)?(click|press|tap|activate|open|show|start|save|send|submit|approve|reject|delete|remove|cancel|end|resolve|escalate|publish|import|assign|request|arrange|schedule|book|create|add|generate|download|export|mark|join|view|edit|close|toggle|choose|select|filter|scroll)\s+(.+)$/i);
     const checkCommand = command.match(/^(?:please\s+)?(check|uncheck|enable|disable)\s+(.+)$/i);
-    const standalone = /^(save|send|submit|approve|reject|delete|remove|cancel|end|resolve|escalate|publish|import|assign|close|reload|go back|confirm|yes|do it|go ahead|no|cancel confirmation|never mind|nevermind)$/i.test(command);
+    const standalone = /^(save|send|submit|approve|reject|delete|remove|cancel|end|resolve|escalate|publish|import|assign|close|reload|go back|confirm|confirm it|confirm action|yes|yes confirm|do it|go ahead|no|cancel confirmation|never mind|nevermind)$/i.test(command);
     if (checkCommand) {
       const matches = this.findNamedControls(checkCommand[2]).filter(item => item.element instanceof HTMLInputElement
         && ['checkbox', 'radio'].includes(item.element.type));
@@ -499,6 +729,13 @@ class VoiceAssistant {
       window.location.reload();
       return true;
     }
+    const scrollCommand = command.match(/^(?:please\s+)?(?:scroll|move)\s+(?:to\s+)?(up|down|top|bottom)$/i);
+    if (scrollCommand) {
+      const direction = scrollCommand[1].toLowerCase();
+      window.scrollTo({ top: direction === 'top' ? 0 : direction === 'bottom' ? document.documentElement.scrollHeight : window.scrollY + (direction === 'down' ? 650 : -650), behavior: 'smooth' });
+      this.setStatus(`Scrolled ${direction}.`);
+      return true;
+    }
     if (verb === 'submit') {
       const activeForm = document.activeElement?.closest?.('form');
       const forms = Array.from(this.voiceScope().querySelectorAll('form')).filter(form => this.isVisible(form));
@@ -514,7 +751,7 @@ class VoiceAssistant {
     }
 
     if (this.pendingAction) {
-      if (/^(?:yes|confirm|confirm action|do it|go ahead)$/i.test(command)) {
+      if (/^(?:yes|yes confirm|confirm|confirm it|confirm action|do it|go ahead)$/i.test(command)) {
         const pending = this.pendingAction;
         this.pendingAction = null;
         if (Date.now() > pending.expiresAt || !pending.element.isConnected || pending.element.disabled) {
@@ -602,8 +839,9 @@ class VoiceAssistant {
     }
     const label = this.controlName(selected.element).slice(0, 120) || target;
     const ownActionLabel = this.normalizeForMatch(this.primaryControlName(selected.element));
-    const needsConfirmation = selected.element.dataset.voiceConfirm !== 'false'
-      && (DESTRUCTIVE_ACTION.test(ownActionLabel) || /^(approve|reject|delete|remove|cancel|end|resolve|escalate|publish|import|assign|send|submit)$/i.test(verb));
+    const needsConfirmation = selected.element.dataset.voiceConfirm === 'true'
+      || (selected.element.dataset.voiceConfirm !== 'false'
+        && (DESTRUCTIVE_ACTION.test(ownActionLabel) || /^(approve|reject|delete|remove|cancel|end|resolve|escalate|publish|import|assign|send|submit)$/i.test(verb)));
     if (needsConfirmation) {
       this.pendingAction = { element: selected.element, label, expiresAt: Date.now() + 30_000 };
       this.setStatus(`Say “confirm” to ${verb} ${label}, or “cancel” to stop.`);
@@ -618,8 +856,9 @@ class VoiceAssistant {
 
   async handleTranscript(rawText) {
     const text = rawText.trim();
+    this.lastCommandText = text;
     const command = this.canonicalizeCommand(text);
-    if (/^(stop|stop reading|stop speaking|quiet)$/.test(command)) {
+    if (/^(stop|stop reading|stop speaking|stop listening|pause listening|quiet)$/.test(command)) {
       this.stopAll();
       this.setStatus('Stopped.');
       return;
@@ -629,7 +868,11 @@ class VoiceAssistant {
       return;
     }
     if (/^(help|voice help|what can you do)$/.test(command)) {
-      this.speak('Say a page name to open it, the label on a visible button to activate it, or fill a field with a value. You can ask a question, focus a field to dictate, or say read this page. During a live meeting, read aloud is paused. For approvals, rejecting, deleting, and other important actions, say confirm after I ask.');
+      this.speak('Say a page name to open it, a visible button label to activate it, or fill a field with a value. Ask for a study plan, say quiz me on a topic, or prepare me for a mentor meeting. On the student meetings page, say arrange a meeting, fill the form by voice, then say schedule now and confirm. Say read this page or stop listening at any time.');
+      return;
+    }
+    if (/^(?:close|hide) (?:the )?voice assistant$/.test(command)) {
+      this.togglePanel(false);
       return;
     }
     if (/^(open|show) (ai|copilot|assistant)$/.test(command)) {
@@ -637,6 +880,19 @@ class VoiceAssistant {
       this.setStatus('AI assistant opened.');
       return;
     }
+
+    if (/^(?:please\s+)?(?:show me|tell me|explain|teach me|draft|summarize|compare|review|improve)\b/i.test(command)) {
+      this.sendVoiceAIPrompt(text + '\n\nAnswer concisely in the same language as my question. Do not assume academic data or claim a platform action was completed.');
+      return;
+    }
+
+    const coachPrompt = this.voiceCoachPrompt(command);
+    if (coachPrompt) {
+      this.sendVoiceAIPrompt(coachPrompt);
+      return;
+    }
+
+    if (this.handleMeetingVoiceIntent(command)) return;
 
     const navigation = this.matchNavigation(command);
     if (navigation) {
@@ -651,17 +907,15 @@ class VoiceAssistant {
       return;
     }
 
-    if (await this.handleFieldCommand(command)) return;
+    if (await this.handleFieldCommand(command, text)) return;
     if (await this.handleControlCommand(command)) return;
 
-    if (/^(?:what|who|when|where|why|how|can you|could you|please explain|tell me|suggest|recommend|help me|explain)\b/i.test(command)) {
+    if (/^(?:what|who|when|where|why|how|can you|could you|please explain|tell me|suggest|recommend|help me|explain|draft|summarize|compare|review|improve|teach me|show me)\b/i.test(command)) {
       if (!document.getElementById('lumina-ai-window')) {
         this.speak('Open your signed-in dashboard to ask the AI assistant a question.');
         return;
       }
-      this.speakNextAIResponse = true;
-      this.setStatus('Sending your question to the assistant…');
-      window.dispatchEvent(new CustomEvent('lumina:ai-prompt', { detail: { prompt: text, autoSend: true } }));
+      this.sendVoiceAIPrompt(`${text}\n\nAnswer concisely in the same language as my question. If I ask you to take a platform action, explain how to do it and do not claim it was completed unless I explicitly confirmed it in the interface.`);
       return;
     }
 
@@ -675,13 +929,12 @@ class VoiceAssistant {
       this.speak('Open your signed-in dashboard to ask the AI assistant a question.');
       return;
     }
-    this.speakNextAIResponse = true;
-    this.setStatus('Sending your question to the assistant…');
-    window.dispatchEvent(new CustomEvent('lumina:ai-prompt', { detail: { prompt: text, autoSend: true } }));
+    this.sendVoiceAIPrompt(`${text}\n\nAnswer concisely in the same language as my question. If I ask you to take a platform action, explain how to do it and do not claim it was completed unless I explicitly confirmed it in the interface.`);
   }
 
   canonicalizeCommand(value) {
-    let command = String(value || '').toLowerCase().replace(/[.,!?]+$/g, '').trim();
+    let command = String(value || '').toLowerCase().replace(/[.,!?]+$/g, '').trim()
+      .replace(/^(?:hey\s+)?lumina[,:\s-]+/i, '').trim();
     const exactTranslations = new Map([
       ['मदत', 'help'], ['मदद', 'help'], ['वाचा', 'read page'], ['पान वाचा', 'read page'],
       ['पुष्टि करें', 'confirm'], ['पुष्टी करा', 'confirm'], ['रद्द करें', 'cancel'], ['रद्द करा', 'cancel'],
@@ -795,14 +1048,36 @@ class VoiceAssistant {
     const plainText = String(text || '').replace(/<[^>]*>/g, ' ').replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
       .replace(/https?:\/\/\S+/g, '').replace(/[`*_#>]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 5000);
     if (!plainText) return;
+    const sequence = ++this.speechSequence;
     window.speechSynthesis.cancel();
+    this.isSpeaking = true;
     const utterance = new SpeechSynthesisUtterance(plainText);
     utterance.lang = this.language();
     utterance.rate = 1;
-    utterance.onstart = () => { this.isSpeaking = true; this.setStatus('Reading aloud…'); };
-    utterance.onend = () => { this.isSpeaking = false; this.speechMutedUntil = Date.now() + 500; this.setStatus('Finished reading.'); };
-    utterance.onerror = () => { this.isSpeaking = false; this.speechMutedUntil = Date.now() + 500; this.setStatus('Could not play speech. Check your device audio settings.', 'error'); };
-    window.speechSynthesis.speak(utterance);
+    utterance.onstart = () => {
+      if (sequence !== this.speechSequence) return;
+      this.isSpeaking = true;
+      this.setStatus('Reading aloud…');
+    };
+    utterance.onend = () => {
+      if (sequence !== this.speechSequence) return;
+      this.isSpeaking = false;
+      this.speechMutedUntil = Date.now() + 600;
+      this.setStatus('Finished reading.');
+      this.resumeListeningAfterSpeech(sequence);
+    };
+    utterance.onerror = () => {
+      if (sequence !== this.speechSequence) return;
+      this.isSpeaking = false;
+      this.speechMutedUntil = Date.now() + 600;
+      this.setStatus('Could not play speech. Check your device audio settings.', 'error');
+      this.resumeListeningAfterSpeech(sequence);
+    };
+    try { window.speechSynthesis.speak(utterance); }
+    catch (_) {
+      this.isSpeaking = false;
+      this.setStatus('Could not start read aloud. Check your device audio settings.', 'error');
+    }
   }
 
   announce(text) {
@@ -810,17 +1085,39 @@ class VoiceAssistant {
     if (!('speechSynthesis' in window) || !window.SpeechSynthesisUtterance) return;
     const plainText = String(text || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 260);
     if (!plainText) return;
+    const sequence = ++this.speechSequence;
     window.speechSynthesis.cancel();
+    this.isSpeaking = true;
     const utterance = new SpeechSynthesisUtterance(plainText);
     utterance.lang = this.language();
     utterance.rate = 1;
-    utterance.onstart = () => { this.isSpeaking = true; };
-    utterance.onend = () => { this.isSpeaking = false; this.speechMutedUntil = Date.now() + 400; };
-    utterance.onerror = () => { this.isSpeaking = false; this.speechMutedUntil = Date.now() + 400; };
-    window.speechSynthesis.speak(utterance);
+    utterance.onstart = () => { if (sequence === this.speechSequence) this.isSpeaking = true; };
+    utterance.onend = () => {
+      if (sequence !== this.speechSequence) return;
+      this.isSpeaking = false;
+      this.speechMutedUntil = Date.now() + 600;
+      this.resumeListeningAfterSpeech(sequence);
+    };
+    utterance.onerror = () => {
+      if (sequence !== this.speechSequence) return;
+      this.isSpeaking = false;
+      this.speechMutedUntil = Date.now() + 600;
+      this.resumeListeningAfterSpeech(sequence);
+    };
+    try { window.speechSynthesis.speak(utterance); }
+    catch (_) { this.isSpeaking = false; }
+  }
+
+  resumeListeningAfterSpeech(sequence) {
+    if (!this.voiceSessionActive || this.isListening || !this.getRecognition()) return;
+    clearTimeout(this.restartTimer);
+    this.restartTimer = setTimeout(() => {
+      if (sequence === this.speechSequence && this.voiceSessionActive && !this.isListening) this.startListening(true);
+    }, 300);
   }
 
   stopSpeech() {
+    this.speechSequence += 1;
     if ('speechSynthesis' in window) window.speechSynthesis.cancel();
     this.isSpeaking = false;
     this.speechMutedUntil = Date.now() + 300;
@@ -828,11 +1125,27 @@ class VoiceAssistant {
 
   stopAll() {
     this.voiceSessionActive = false;
+    clearTimeout(this.restartTimer);
+    this.restartTimer = null;
     this.stopSpeech();
-    try { this.recognition?.abort(); } catch (_) {}
+    clearTimeout(this.recordingTimeout);
+    this.recordingTimeout = null;
+    if (this.mediaRecorder?.state === 'recording') {
+      this.transcribeRecordingOnStop = true;
+      try { this.mediaRecorder.stop(); } catch (_) {}
+    } else {
+      this.voiceSessionId += 1;
+      if (this.recognition) {
+        this.recognition.onend = null;
+        this.recognition.onerror = null;
+        try { this.recognition.abort(); } catch (_) {}
+        this.recognition = null;
+      }
+    }
     this.isListening = false;
     this.container?.classList.remove('is-listening');
-    this.container?.querySelector('[data-voice-listen]')?.setAttribute('aria-pressed', 'false');
+    this.updateListenButton(false);
+    this.pendingAction = null;
   }
 
   unmount() {

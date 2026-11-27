@@ -7,8 +7,8 @@
 import { onAuthChange, getCurrentUser, fetchUserProfile, getUserProfile } from './auth.js';
 import { initNotificationListener, stopNotificationListener, renderNotifications } from './notifications.js?v=2';
 import { openWebIssueModal } from './components/web-issue-modal.js';
-import { initAIAssistant, aiAssistantWidget } from './components/ai-assistant-widget.js?v=22';
-import { initVoiceAssistant } from './components/voice-assistant.js?v=3';
+import { initAIAssistant, aiAssistantWidget } from './components/ai-assistant-widget.js?v=23';
+import { initVoiceAssistant } from './components/voice-assistant.js?v=4';
 import { onLanguageChange } from './i18n.js';
 import { escapeHtml } from './utils.js';
 
